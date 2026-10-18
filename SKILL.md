@@ -13,6 +13,22 @@ After validated review delivery, run the project's step 3 by default. An explici
 review-only request, including an orchestrator's review-only handoff, stops after
 review; the orchestrator then owns its single step-3 run.
 
+## Project context and responsibility
+
+Step 2 supplies molecular structures, mapper candidates and a selected atom
+correspondence for the active metabolic network. Incorrect compound identities
+or atom assignments can create false carbon-transfer paths or disconnect valid
+ones. Review therefore examines the original reaction chemistry and the actual
+stored correspondence, including omitted participants and partial coverage.
+
+This skill owns evidence-backed structure completion and reaction review,
+followed by the configured step-3 handoff. The enzymatic-atom-mapping skill supplies
+scientific correspondence analysis; the project supplies calculation and file
+interfaces. ReviewRequired is a request for assessment, AIReviewed records analysis
+performed, and AIGenerated records an accepted AI mapping replacement. These flags
+describe workflow state and provenance, not a guarantee of chemical correctness.
+A successful downstream calculation likewise does not validate its input mapping.
+
 ## Locate the interfaces
 
 Read the installed **enzymatic-atom-mapping** skill and use it for scientific
