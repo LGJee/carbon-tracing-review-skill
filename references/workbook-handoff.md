@@ -174,25 +174,54 @@ project's data directory if reuse is wanted. No project files or research record
 are uploaded by these commands. Runtime cache files belong to local project data,
 not the distributed skill.
 
-## Optional carbon propagation
+## Default carbon propagation
 
-When the user requests it, place reviewed copies in the analysis plan's output
-directory and run from the compatible project root:
+The skill agent runs step 3 after validated review delivery by default. The
+inspect/apply helpers do not launch propagation. Skip this stage for an explicit
+review-only request or an orchestrator's review-only handoff; report the handoff
+so only the owner runs step 3.
 
-```bash
-python3 step3_carbon_flow.py
-python3 step3_carbon_flow.py MyCulture --rounds 1
-```
+1. Locate the compatible project and tracing environment. Find the case's actual
+   analysis_plan.json from the supplied path or nearby case directory; use
+   data/analysis_plan.json only when it matches the supplied models. Confirm model
+   names, SourceInputSHA256, actual input hashes, ordered carbon sources and output
+   location. Unknown source names or conflicting plans need clarification; never
+   rewrite hashes to bypass validation.
+2. Ensure validated reviewed workbooks are in the plan's resolved output folder,
+   under <model>_2_atom_mapping_AIGenerated.xlsx. Do not silently replace existing
+   deliveries. A delivered copy elsewhere is not discovered automatically: resolve
+   that handoff through supported interfaces, or report the blocker. Preserve
+   earlier completed results before rerunning outputs that step 3 will replace.
+3. From the project root, select only the supplied models and the actual plan:
 
-Enumeration reads available ordinary and `<model>_2_atom_mapping_AIGenerated.xlsx`
-files for models in the plan and writes separate
-`<model>_3_carbon_flow.xlsx` and
-`<model>_3_carbon_flow_AIGenerated.xlsx`. It performs no AI review or
-mapper prediction. A separate step4 and method selector are not required.
-Either mapping version may exist alone. Model names, input hashes and ordered
-sources must still match the
-plan. Original step-2 and ordinary step-3 outputs remain separate. Inspect actual
-installed interfaces before invoking; older versions may lack this entry.
+   ```bash
+   python3 step3_carbon_flow.py MyCulture OtherCulture --plan path/to/analysis_plan.json
+   ```
+
+   Substitute verified names and the real plan path; paths inside the plan use
+   the installed project's conventions. Group files by compatible plan when
+   necessary. Reuse the tracing interpreter, installed method/round/resource
+   settings and size guards. Do not call all models by omitting the names.
+4. Check the exit status and this invocation's carbon_flow_run.json, input/mapping
+   hashes, saved tables and files. A prior workbook or Summary collection is not
+   proof that this run succeeded. Record actual mapping versions, selected
+   methods, saved Enumeration rounds, stop reasons and errors in the English
+   review report, with links to the outputs. Preserve the review report's original
+   decisions and counts when adding this execution status.
+
+Step 3 reads available ordinary and AI-reviewed mappings independently for those
+models. It writes <model>_3_carbon_flow.xlsx and
+<model>_3_carbon_flow_AIGenerated.xlsx as applicable; either version may exist
+alone. Current versions combine Enumeration and size-1 EMU-inspired source
+balances according to script settings. Inspect older interfaces before running;
+do not invent a method flag or a separate step4.
+
+No review targets means no fabricated AI copy: propagate the valid supplied
+mapping with its actual provenance. A retained/unresolved review-only copy can
+still be a legitimate input without newly TRUE AIGenerated flags. Unassessed
+targets and disabled partial maps must remain explicit limitations in the report.
+Missing compatible integration blocks only propagation; deliver completed review
+outputs and explain what is needed. Do not claim downstream success.
 
 ## Local helper checks
 

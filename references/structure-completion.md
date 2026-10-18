@@ -132,7 +132,9 @@ results, and any blocked operations. Link the detailed structure archive. If no
 reaction-level AI review was performed, state this and do not set AIReviewed or
 AIGenerated merely to produce a file. Keep staging private while an operation is
 in progress; preserve its provenance beside the delivery when needed for audit.
-No propagation runs unless separately requested.
+The completion helper does not launch propagation. After reaction review and
+validated delivery, the skill continues to step 3 by default, unless review-only
+was requested or a workflow orchestrator owns the subsequent run.
 
 The manual CSV has exactly Species, MetaboliteName, SMILES. Species is the full
 Latin binomial with underscores, not the analysis condition name. non_IUPD/IUPD

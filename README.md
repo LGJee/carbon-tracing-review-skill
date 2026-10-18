@@ -3,7 +3,8 @@
 Review atom-mapping workbooks from
 [Atom-Mapped Carbon Tracing](https://github.com/LGJee/atom-mapped-carbon-tracing),
 complete missing molecular structures when justified, and deliver reviewed copies
-with evidence and a detailed report. This repository replaces the former
+with evidence and a detailed report, then run the project's step-3 carbon analysis
+by default. This repository replaces the former
 carbon-tracing-ai-review-skill name.
 
 ## Install
@@ -25,11 +26,24 @@ Attach one or more `<model>_2_atom_mapping.xlsx` workbooks and send:
 
 ```text
 $carbon-tracing-review-skill
-Review these files and save the reviewed copies and report to my project's results directory.
+Review these files, save the reviewed copies and report, and run step 3 for these models.
 ```
 
-Provide the project path if it cannot be located. The agent can communicate in
-your language; generated files and reports are in English.
+Uploading the files and invoking the skill is sufficient when the compatible
+project, environments and matching analysis plan can be located. Provide the
+project path or plan if requested. Step 3 uses that plan's carbon sources and
+the installed calculation settings; it does not run unrelated models.
+
+To stop after review instead, send:
+
+```text
+$carbon-tracing-review-skill
+Review these files only. Do not run step 3.
+```
+
+If propagation cannot run, completed review outputs are still delivered with the
+actual blocker. The agent can communicate in your language; files and reports
+are in English.
 
 ## Workflow
 
@@ -46,6 +60,8 @@ your language; generated files and reports are in English.
    as Partial. Unresolved atoms and generic pools are not fabricated.
 6. Save a separate reviewed workbook, verify it and write detailed outcome reports.
 7. Save accepted discoveries and evidence for later validated reuse.
+8. Run step 3 for the supplied models, verify current outputs and link them in the
+   report, unless review-only was requested.
 
 Original inputs and unrelated records are preserved. Structure completion may
 update structures and affected mapper/selection/final rows in a staging copy.
@@ -58,6 +74,8 @@ Keep the original equations, signed fluxes and SourceInputSHA256 throughout.
   deliveries are not silently overwritten.
 - `AI_mapping_review_<timestamp>.md` and `.json`: all target outcomes, including
   retained, unresolved, unassessed and unsuccessful replacements.
+- `<model>_3_carbon_flow_AIGenerated.xlsx`: step-3 output for reviewed mappings;
+  available original mappings may also produce `<model>_3_carbon_flow.xlsx`.
 - `data/ai_smiles.csv`: Species, MetaboliteName, SMILES, Source.
 - `data/ai_atom_mappings.csv`: Species, ReactionID, MappedReactionSMILES, Source.
 - `data/ai_structure_reviews/` and `data/ai_mapping_reviews/`: detailed immutable
@@ -100,7 +118,10 @@ Tests use isolated synthetic fixtures and mocked mapper outputs. They check
 bookkeeping, preservation and handoffs, not biochemical prediction accuracy.
 No user workbooks, cache data or credentials are distributed.
 
-Carbon propagation is optional and runs only when requested, through the selected
-project's step3_carbon_flow.py and analysis plan. Inspect its installed method
-settings and naming; this skill does not implement a propagation engine or
-upgrade/publish the computation project.
+Carbon analysis runs by default after review, through the selected project's
+step3_carbon_flow.py and matching analysis plan. An explicit review-only request
+skips it. The workflow skill requests review-only and then runs step 3 once itself.
+Inspect installed method settings and naming; this skill does not implement a
+propagation engine or upgrade/publish the computation project. The helper scripts
+alone do not perform AI research or launch step 3; the skill coordinates these
+stages.

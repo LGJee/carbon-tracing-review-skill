@@ -1,6 +1,6 @@
 ---
 name: carbon-tracing-review-skill
-description: Review flagged or unmapped carbon-tracing reactions, resolve missing compound structures with recorded evidence, remap affected reactions, and deliver validated AI-assisted workbooks for step 3.
+description: Review flagged or unmapped carbon-tracing reactions, resolve missing compound structures with recorded evidence, remap affected reactions, deliver validated AI-assisted workbooks, and run the project's step-3 carbon analysis.
 ---
 
 # Carbon Tracing Review
@@ -9,7 +9,9 @@ Review one or more `<model>_2_atom_mapping.xlsx` workbooks. Deliver separate
 `<model>_2_atom_mapping_AIGenerated.xlsx` copies containing accepted replacements.
 Deliver a detailed English Markdown report and complete JSON outcomes in the
 configured results directory, including runs with no accepted replacements.
-Default to workbook review and delivery; run carbon propagation only when asked.
+After validated review delivery, run the project's step 3 by default. An explicit
+review-only request, including an orchestrator's review-only handoff, stops after
+review; the orchestrator then owns its single step-3 run.
 
 ## Locate the interfaces
 
@@ -62,7 +64,7 @@ Missing a propagation entry alone does not block workbook delivery.
 
 If no structure can be completed, skip remapping and continue scientifically
 possible reviews. Mapper failure is not a gate for scientific analysis.
-Do not run propagation unless requested.
+Continue with the default step-3 handoff below unless review-only was requested.
 
 ## Resolve missing structures when needed
 
@@ -260,20 +262,30 @@ flags and distinguish current-run counts from pre-existing provenance. Explain
 any difference caused by targets absent from Final_Mapping. Report delivery or
 archive errors explicitly. Give the user the readable report path.
 
-## Optional propagation and delivery
+## Run step 3 and deliver
 
-Only when requested, confirm a compatible project, environment and analysis plan,
-then use `step3_carbon_flow.py`. It processes available original/AI mappings
-separately and writes `<model>_3_carbon_flow_AIGenerated.xlsx` for
-reviewed copies. Newer step 3 combines Enumeration and size-1 EMU-inspired
-source balances in that workbook, with separate method settings. Do not create
-separate method workbooks or claim mean fractions are full isotope simulations.
-Enumeration defaults to exporting R1-R3 details; later rounds update Summary.
-No method flag is needed. Inspect older project interfaces
-before selecting a command. Never
-bundle another propagation implementation. Missing integration requires an
-explanation, not a success claim. The handoff reference documents file naming
-and plan/hash checks.
+After saved-copy validation and evidence/report delivery, automatically run the
+compatible project's step3_carbon_flow.py. The explicit review-only exception above
+prevents duplicate runs when a workflow orchestrator owns propagation. Follow
+[the handoff procedure](references/workbook-handoff.md#default-carbon-propagation)
+to resolve the actual plan, select only supplied models and verify current-run
+outputs. Do not rerun step 1, all mappers, or an unrelated model batch.
+
+A missing compatible project, environment, plan or carbon-source configuration
+blocks propagation, not independent review work. Deliver completed review outputs,
+explain the actual blocker and request only the missing integration information.
+Do not fabricate a plan, hashes or carbon sources. No review targets means no
+artificial AI copy; run the valid supplied mapping version through the matching
+plan and report the review no-op. If some workbooks fail, process only valid
+compatible workbooks and report incomplete coverage.
+
+Use the installed method settings and propagation implementation; do not bundle
+another engine. Newer step 3 combines Enumeration and size-1 EMU-inspired source
+balances in one workbook per mapping version. Do not invent a method CLI flag,
+create separate method workbooks or claim mean fractions are isotope simulations.
+Verify the process result, current run manifest and delivered files. Link the
+actual commands, outputs, mapping versions, saved rounds and stop reasons from
+the English review report; distinguish propagation failure from review failure.
 
 Report reviewed/accepted/unresolved counts per workbook, evidence and remaining
 ambiguities, delivered paths, and which checks actually ran. Explain that results
