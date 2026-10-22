@@ -42,6 +42,10 @@ def inspect(path, project):
     missing = []
     species = workbook_species(path, project)
     directory = project / "data/ai_structure_reviews"
+    from carbon_flow_tools.smiles_completion import metabolite_name
+    enabled = {(row["Species"], metabolite_name(row["MetaboliteName"]), row["SMILES"])
+               for row in review.read_ai_records(project / "data", "ai_smiles.csv",
+                   ["Species", "MetaboliteName", "SMILES", "Source"])}
     archives, issues = [], []
     for item in sorted(directory.glob("*.json")) if directory.is_dir() else []:
         try:
@@ -59,7 +63,9 @@ def inspect(path, project):
         if not get_smiles(row):
             identity = identity_context(review.model_name(path), row, species)
             missing.append(dict(identity, cached_candidates=[entry for entry in archives
-                                 if entry.get("identity") == identity]))
+                                 if entry.get("identity") == identity
+                                 and (species, metabolite_name(identity["MetaboliteName"]),
+                                      entry["proposal"].get("SMILES")) in enabled]))
     return dict(input_file=str(path), input_sha256=review.digest(path),
                 missing_structures=missing, cache_issues=issues)
 
@@ -264,14 +270,15 @@ def complete(entry, project, output_dir):
             final["AIReviewed"] = False
         update_rows(workbook, "Final_Mapping", final.to_dict("records"))
         ids = {reaction.reaction_id for reaction in affected}
-        if "Partial_Mapping" in workbook.sheetnames:
+        if hasattr(api["pipeline"], "read_partial_mapping_records"):
+            old = api["pipeline"].read_partial_mapping_records(workbook)
+        elif "Partial_Mapping" in workbook.sheetnames:
             values = list(workbook["Partial_Mapping"].values)
             old = pd.DataFrame(values[1:], columns=values[0])
+        else:
+            old = pd.DataFrame()
+        if not old.empty:
             partials = pd.concat([old.loc[~old.ReactionID.astype(str).isin(ids)], partials], ignore_index=True)
-        if not partials.empty:
-            api["pipeline"].write_sheet(workbook, "Partial_Mapping", partials)
-        elif "Partial_Mapping" in workbook.sheetnames:
-            del workbook["Partial_Mapping"]
         values = list(workbook["Mapping_Info"].values)
         metadata = pd.DataFrame(values[1:], columns=values[0])
         if "ReactionID" in metadata:
@@ -283,6 +290,12 @@ def complete(entry, project, output_dir):
                         StructureReviewArchive=str(archive))
                    for backend, reactions in predictions.items() for r in reactions]
         api["pipeline"].write_sheet(workbook, "Mapping_Info", pd.concat([metadata, pd.DataFrame(details)], ignore_index=True))
+        if hasattr(api["pipeline"], "write_partial_mapping_records"):
+            api["pipeline"].write_partial_mapping_records(workbook, partials)
+        elif not partials.empty:
+            api["pipeline"].write_sheet(workbook, "Partial_Mapping", partials)
+        elif "Partial_Mapping" in workbook.sheetnames:
+            del workbook["Partial_Mapping"]
         api["pipeline"].save_output(workbook, output)
     finally:
         workbook.close()

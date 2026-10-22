@@ -109,15 +109,22 @@ def review_targets(workbook):
     if not raw:
         raise ValueError("No raw mapper sheet supplies ReactionSMILES")
     partials = {}
-    if "Partial_Mapping" in workbook.sheetnames:
-        rows = list(workbook["Partial_Mapping"].values)
+    for name in ("Mapping_Info", "Partial_Mapping"):
+        if name not in workbook.sheetnames:
+            continue
+        rows = list(workbook[name].values)
         headers = rows[0] if rows else ()
+        records = [dict(zip(headers, values)) for values in rows[1:] if any(v is not None for v in values)]
+        if name == "Mapping_Info":
+            records = [{key: value for key, value in row.items() if key != "RecordType" and value is not None}
+                       for row in records if row.get("RecordType") == "PartialMapping"]
+        if not records:
+            continue
         if not {"ReactionID", "Rule", "CarbonAtomMap", "SourceSMILES", "ProductSMILES"} <= set(headers):
-            raise ValueError("Partial_Mapping is missing rule context")
-        for values in rows[1:]:
-            if any(v is not None for v in values):
-                record = dict(zip(headers, values))
-                partials.setdefault(identity(record["ReactionID"]), []).append(record)
+            raise ValueError("Saved partial correspondences are missing rule context")
+        for record in records:
+            partials.setdefault(identity(record["ReactionID"]), []).append(record)
+        break
     omissions = {}
     info = list(workbook["Mapping_Info"].values)
     if info and {"ReactionID", "OmittedComponentsJSON"} <= set(info[0]):
@@ -460,16 +467,26 @@ def review_species(path, project):
     return match.group(1) if match else model
 
 
+def read_ai_records(directory, filename, fields):
+    """CSV rows are the user-editable allowlist for reusing archived AI results."""
+    source = directory / filename
+    if not source.is_file():
+        return []
+    with source.open(encoding="utf-8-sig", newline="") as stream:
+        reader = csv.DictReader(stream)
+        if reader.fieldnames != fields:
+            raise ValueError("Unexpected AI record columns: " + str(source))
+        rows = list(reader)
+    if any(None in row or any(row[field] is None for field in fields) for row in rows):
+        raise ValueError("Malformed AI CSV row: " + str(source))
+    return [row for row in rows if any(value.strip() for value in row.values())]
+
+
 def save_ai_records(directory, filename, fields, additions):
-    """Keep a readable index; merge provenance without deleting earlier candidates."""
+    """Merge new accepted rows with the current CSV, never rebuild from archives."""
     destination = directory / filename
+    additions = read_ai_records(directory, filename, fields) + list(additions)
     rows = []
-    if destination.is_file():
-        with destination.open(encoding="utf-8-sig", newline="") as stream:
-            reader = csv.DictReader(stream)
-            if reader.fieldnames != fields:
-                raise ValueError("Unexpected AI record columns: " + str(destination))
-            rows = list(reader)
     for addition in additions:
         matching = [row for row in rows if all(row[field] == addition[field] for field in fields[:-1])]
         if matching:
@@ -477,10 +494,11 @@ def save_ai_records(directory, filename, fields, additions):
                 matching[0]["Source"].split(" | ") + addition["Source"].split(" | ")))
         else:
             rows.append(addition)
+    rows.sort(key=lambda row: tuple(row[field] for field in fields[:-1]))
     directory.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".ai-records-", dir=str(directory)) as temporary:
         staged = Path(temporary) / filename
-        with staged.open("w", encoding="utf-8", newline="") as stream:
+        with staged.open("w", encoding="utf-8-sig", newline="") as stream:
             writer = csv.DictWriter(stream, fieldnames=fields)
             writer.writeheader()
             writer.writerows(rows)
@@ -564,12 +582,18 @@ def archive_review(report, targets, proposals, directory):
     return str(output)
 
 
-def cached_reviews(project, targets):
+def cached_reviews(project, targets, species=None):
     """Expose exact-input candidates for review, never apply them automatically."""
     candidates, issues = {}, []
     directory = project / "data/ai_mapping_reviews" if project else None
     if directory is None or not directory.is_dir():
         return candidates, issues
+    try:
+        enabled = {(row["Species"], row["ReactionID"], row["MappedReactionSMILES"])
+                   for row in read_ai_records(directory.parent, "ai_atom_mappings.csv",
+                       ["Species", "ReactionID", "MappedReactionSMILES", "Source"])}
+    except (OSError, ValueError) as error:
+        return candidates, [dict(cache_file=str(directory.parent / "ai_atom_mappings.csv"), error=str(error))]
     fields = (
         "ReactionID",
         "ReactionName",
@@ -582,11 +606,20 @@ def cached_reviews(project, targets):
             archived = json.loads(path.read_text(encoding="utf-8"))
             if archived.get("schema_version") != 1:
                 raise ValueError("Unsupported review archive schema")
+            archived_species = review_species(Path(archived["input_file"]), project)
+            if species is not None and archived_species != species:
+                continue
             for record in archived["reactions"]:
                 if record["outcome"]["status"] != "accepted":
                     continue
                 target = record["target"]
                 key = target["ReactionID"]
+                mapped = record["proposal"]["MappedReactionSMILES"]
+                if target["MappingDirection"] == "reverse":
+                    mapped = ">>".join(reversed(mapped.split(">>")))
+                # Keeping evidence does not undo a user's deletion or correction in the CSV.
+                if (archived_species, key, mapped) not in enabled:
+                    continue
                 if (key in targets and target.get("partial_mappings", []) !=
                         targets[key].get("partial_mappings", [])):
                     continue
@@ -965,7 +998,7 @@ def main(argv=None):
                     workbook.close()
                 if digest(source) != before:
                     raise ValueError("Input changed during extraction; retry")
-                cached, cache_issues = cached_reviews(project, targets)
+                cached, cache_issues = cached_reviews(project, targets, review_species(source, project))
                 for key, target in targets.items():
                     target["cached_candidates"] = cached.get(key, [])
                 report.append(

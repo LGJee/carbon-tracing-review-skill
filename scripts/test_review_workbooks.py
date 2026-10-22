@@ -425,6 +425,27 @@ class WorkbookTests(unittest.TestCase):
         finally:
             reviewed.close()
 
+    def test_inspect_command_uses_each_workbook_species(self):
+        sources = [self.folder / (name + "_2_atom_mapping.xlsx") for name in
+                   ("Escherichia_coli_non_IUPD", "Saccharomyces_cerevisiae_IUPD")]
+        for source in sources:
+            fixture(source)
+        hashes = [review.digest(source) for source in sources]
+        stream = StringIO()
+        with patch.object(review, "cached_reviews", return_value=({}, [])) as cache:
+            with redirect_stdout(stream):
+                result = review.main(["inspect"] + [str(path) for path in sources]
+                                     + ["--project", str(PROJECT)])
+        self.assertEqual(result, 0)
+        reports = json.loads(stream.getvalue())["workbooks"]
+        self.assertEqual([row["input_file"] for row in reports],
+                         [str(path.resolve()) for path in sources])
+        self.assertEqual([row["input_sha256"] for row in reports], hashes)
+        self.assertTrue(all(row["targets"] for row in reports))
+        self.assertEqual([call[0][2] for call in cache.call_args_list],
+                         ["Escherichia_coli", "Saccharomyces_cerevisiae"])
+        self.assertEqual([review.digest(source) for source in sources], hashes)
+
     def test_multiple_workbooks_continue_after_one_failure(self):
         second = self.folder / "Other_Culture_2_atom_mapping.xlsx"
         fixture(second)
@@ -500,8 +521,8 @@ class WorkbookTests(unittest.TestCase):
         output = self.folder / "reviewed/Mixed_Culture_3_carbon_flow_AIGenerated.xlsx"
         workbook = load_workbook(output)
         try:
-            self.assertEqual(workbook.sheetnames, ["Summary", "Carbon_Flow_R1"])
-            records = list(workbook["Carbon_Flow_R1"].values)
+            self.assertEqual(workbook.sheetnames, ["Summary", "Carbon_Flow"])
+            records = list(workbook["Carbon_Flow"].values)
             rows = [dict(zip(records[0], row)) for row in records[1:]]
             product = next(row for row in rows if row["Production"] == "B[c]")
             self.assertEqual(
@@ -552,6 +573,15 @@ class WorkbookTests(unittest.TestCase):
                 {},
                 None,
             )
+        # Removing CSV rows disables old cache entries without deleting their evidence.
+        index = self.folder / "reviewed/data/ai_atom_mappings.csv"
+        previous = index.read_bytes()
+        index.write_text("Species,ReactionID,MappedReactionSMILES,Source\n", encoding="utf-8-sig")
+        self.assertEqual(review.cached_reviews(self.folder / "reviewed", targets)[0], {})
+        self.assertTrue(Path(report["archive_file"]).is_file())
+        index.unlink()
+        self.assertEqual(review.cached_reviews(self.folder / "reviewed", targets)[0], {})
+        index.write_bytes(previous)
         targets["r1"]["MappingDirection"] = "reverse"
         self.assertEqual(
             review.cached_reviews(self.folder / "reviewed", targets)[0], {}
@@ -714,7 +744,7 @@ class AIRecordTests(unittest.TestCase):
                 dict(ReactionID="R", status="accepted"), dict(ReactionID="bad", status="rejected")])
             for _ in range(2):
                 review.index_ai_mappings(report, targets, [accepted, rejected], directory, "Escherichia_coli")
-            with (directory / "ai_atom_mappings.csv").open() as stream:
+            with (directory / "ai_atom_mappings.csv").open(encoding="utf-8-sig") as stream:
                 reader = csv.DictReader(stream)
                 self.assertEqual(reader.fieldnames, ["Species", "ReactionID", "MappedReactionSMILES", "Source"])
                 rows = list(reader)
@@ -776,6 +806,28 @@ class CarbonRuleReviewTests(unittest.TestCase):
                 review.apply_workbook(entry, PROJECT, MAPPING_SKILL, root / "missing_verdict")
 
 
+
+
+class AIRecordTableTests(unittest.TestCase):
+    def test_readable_order_encoding_and_deleted_rows_stay_deleted(self):
+        import csv
+        fields = ["Species", "MetaboliteName", "SMILES", "Source"]
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            entries = [dict(Species="Escherichia_coli", MetaboliteName=name,
+                            SMILES="C", Source="https://example.org/test") for name in ("Z", "A")]
+            path = review.save_ai_records(root, "ai_smiles.csv", fields, entries)
+            self.assertTrue(path.read_bytes().startswith(b"\xef\xbb\xbf"))
+            with path.open(encoding="utf-8-sig", newline="") as stream:
+                rows = list(csv.DictReader(stream))
+            self.assertEqual([row["MetaboliteName"] for row in rows], ["A", "Z"])
+            with path.open("w", encoding="utf-8-sig", newline="") as stream:
+                writer = csv.DictWriter(stream, fieldnames=fields)
+                writer.writeheader()
+                writer.writerow(rows[1])
+            review.save_ai_records(root, path.name, fields, [dict(entries[0], MetaboliteName="M")])
+            rows = review.read_ai_records(root, path.name, fields)
+            self.assertEqual([row["MetaboliteName"] for row in rows], ["M", "Z"])
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)

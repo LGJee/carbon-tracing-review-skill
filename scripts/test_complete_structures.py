@@ -158,7 +158,7 @@ class CompletionTests(unittest.TestCase):
                                       ("Escherichia_coli_IUPD", "different", "B[e]")):
                 identity = completion.identity_context(model, SimpleNamespace(MetaboliteID=key, MetaboliteName=name))
                 completion.persist(root, model, [dict(identity=identity, proposal=proposal(key, name))], "0" * 64)
-            with (root / "data/ai_smiles.csv").open() as handle:
+            with (root / "data/ai_smiles.csv").open(encoding="utf-8-sig") as handle:
                 reader = csv.DictReader(handle)
                 self.assertEqual(reader.fieldnames, ["Species", "MetaboliteName", "SMILES", "Source"])
                 rows = list(reader)
@@ -294,6 +294,14 @@ class CompletionTests(unittest.TestCase):
             self.assertEqual(result["mapper_reactions"], ["R"])
             self.assertEqual(review.digest(path), original_hash)
             self.assertEqual(cached["missing_structures"][0]["cached_candidates"][0]["proposal"]["SMILES"], "CCO")
+            index = project / "data/ai_smiles.csv"
+            previous = index.read_bytes()
+            index.write_text("Species,MetaboliteName,SMILES,Source\n", encoding="utf-8-sig")
+            with patch.object(completion, "context", side_effect=lambda path, _: original_context(path, PROJECT)):
+                without_cache = completion.inspect(path, project)
+            self.assertTrue(all(not row["cached_candidates"] for row in without_cache["missing_structures"]))
+            self.assertTrue(list((project / "data/ai_structure_reviews").glob("*.json")))
+            index.write_bytes(previous)
             output = Path(result["output_file"])
             loaded, _, _ = load_final_mappings(output, {})
             self.assertEqual(next(r for r in loaded if r.reaction_id == "R").status, "mapped")
@@ -301,7 +309,8 @@ class CompletionTests(unittest.TestCase):
                                 reviews=[dict(ReactionID="R", decision="unchanged", AIReviewed=False,
                                               rationale="Automatic test triage only, not scientific review")])
             with patch.object(review, "archive_review", return_value="synthetic-test-only"):
-                reviewed = review.apply_workbook(review_entry, PROJECT, output_dir=root / "delivery")
+                reviewed = review.apply_workbook(review_entry, PROJECT, mapping_skill=MAPPING_SKILL,
+                                             output_dir=root / "delivery")
             self.assertTrue(Path(reviewed["output_file"]).name.endswith("_AIGenerated.xlsx"))
             load_final_mappings(Path(reviewed["output_file"]), {})
             original, updated = load_workbook(path), load_workbook(output)

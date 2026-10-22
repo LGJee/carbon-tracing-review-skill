@@ -307,3 +307,14 @@ different mapping candidates retain their own rows. Reconcile conflicting struct
 identities before saving. Never modify manual CSVs as a side effect of AI completion.
 Ordinary step 2 may reuse missing AI structures with review flags; manual and existing
 input structures retain priority. User-confirmed promotion to manual data is explicit.
+
+### Editing or clearing AI cache tables
+
+The two AI CSV files are the active, user-editable cache lists. Keep their four-column
+headers; the first three columns match the corresponding manual table. Rows are
+sorted and saved as UTF-8 with BOM for Excel. Delete data rows to disable those old
+AI candidates, or remove a CSV to disable that AI cache. Archived evidence alone
+must not restore deleted or edited entries. New accepted research may add a new
+record later. Clearing a cache does not alter existing workbooks, manual tables,
+model annotations or the independent database structure_cache.json. AI mapping
+rows remain review candidates, not automatic step-2 overrides.
