@@ -456,6 +456,7 @@ def review_species(path, project):
     """Resolve species from model provenance, with a condition-name fallback."""
     model = model_name(path)
     if project is not None:
+        sys.path.insert(0, str(project))
         from carbon_flow_tools.smiles_completion import species_name
         for plan in (path.parent / "analysis_plan.json", project / "data/analysis_plan.json"):
             if plan.is_file():

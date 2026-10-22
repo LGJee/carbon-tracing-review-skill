@@ -4,6 +4,7 @@ import argparse
 from contextlib import redirect_stdout
 from io import StringIO
 import json
+import subprocess
 from pathlib import Path
 import sys
 import tempfile
@@ -444,6 +445,16 @@ class WorkbookTests(unittest.TestCase):
         self.assertTrue(all(row["targets"] for row in reports))
         self.assertEqual([call[0][2] for call in cache.call_args_list],
                          ["Escherichia_coli", "Saccharomyces_cerevisiae"])
+        completed = subprocess.run(
+            [sys.executable, str(Path(review.__file__).resolve()), "inspect"]
+            + [str(path) for path in sources] + ["--project", str(PROJECT)],
+            cwd=str(self.folder), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            universal_newlines=True)
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        fresh = json.loads(completed.stdout)["workbooks"]
+        self.assertEqual([row["model"] for row in fresh],
+                         ["Escherichia_coli_non_IUPD", "Saccharomyces_cerevisiae_IUPD"])
+        self.assertTrue(all(row["targets"] for row in fresh))
         self.assertEqual([review.digest(source) for source in sources], hashes)
 
     def test_multiple_workbooks_continue_after_one_failure(self):
