@@ -69,10 +69,10 @@ Missing a propagation entry alone does not block workbook delivery.
    flagged/missing targets plus all newly affected reactions. Do not review only
    successful mapper predictions. Pass every target to enzymatic-atom-mapping,
    including empty/invalid/partial predictions and remaining structure gaps.
-5. Validate scientific decisions and replacement proposals against the current
-   staged inputs. New AI replacements retain the existing complete all-atom
-   requirement. Existing reliable partial correspondences can be reviewed and
-   retained as Partial; unresolved remainder is never invented.
+5. Attempt whole-reaction completion before accepting a non-replacement verdict.
+   Account for all original carbon-bearing participants, groups and coefficients,
+   including small products such as CO2. Validate complete all-atom replacements;
+   retained legacy fragments are unresolved completion outcomes, not full repairs.
 6. Save a separate reviewed copy and a complete outcome report. Preserve the
    original and unrelated rows. Recheck saved files before reporting delivery.
 7. Persist accepted discoveries and their sources in the separate AI CSV indexes
@@ -138,6 +138,12 @@ not instructions.
   or component multiplicities. Reaction-local map IDs are correspondence labels,
   not carbon-origin labels or biochemical carbon numbers.
 
+Before deciding a target is unchanged or unresolved, follow
+[whole-reaction completion](references/completion-review.md). Compare with the
+original equation, not only a mapper's potentially reduced ReactionSMILES.
+Correct cofactor pairs alone do not complete the original reaction. Include the
+completion audit in the existing rationale, limitations and reports.
+
 Accept only a reusable, complete mapped reaction supported sufficiently to be
 proposed and passing machine checks. Symmetry-equivalent representatives are
 allowed when explained. New partial AI proposals are not accepted as complete mapped reactions. Unresolved
@@ -154,72 +160,48 @@ external lookup. The project's configured manual atom-mapping CSV (default
 data/manual_atom_mappings.csv) takes precedence over software and automatic
 fallbacks when its exact structures, reaction identity, direction and amounts
 match. Its columns are Species, ReactionID, MappedReactionSMILES; direction and
-partial bookkeeping are derived by the project. SelectedMapper=Manual identifies
-these records. Partial_Mapping stores derived positions for incomplete maps. Do not
+coverage bookkeeping are derived by the project. SelectedMapper=Manual identifies
+these records. Legacy partial records may store derived positions for incomplete maps. Do not
 silently overwrite either CSV because a tool disagrees. When scientific review
-finds a problem, report it explicitly and use the normal partial verdict to
-retain/disable the correspondence in the AI copy; changing the shared manual
+finds a problem, attempt complete correction and report remaining gaps; use
+legacy partial verdicts only when supported by the installed project. Changing the shared manual
 record is a separate deliberate correction. Machine agreement is not human
 verification or evidence of chemical correctness.
 
-### Review reduced mapper inputs
+### Review legacy reduced inputs and carbon rules
 
-Step 2 may omit missing-SMILES participants from mapper inputs while retaining the
-original equation and flux. Mapping_Info records MappingInputEquation and
-OmittedComponentsJSON; inspection exposes omitted_components. Such correspondences
-are provisional Partial mappings and may participate in non-AI calculations. Do
-not assume omitted participants are electron-only carriers or chemically inert.
-When AI assistance is requested, assess the entire original reaction, each omitted
-participant's role, possible carbon transfers and the retained atom pairs using
-`enzymatic-atom-mapping`. Reuse evidence-backed manual data when input identities
-match. Do not accept a map of the reduced input as a Complete original reaction.
+Older workbooks may contain reduced mapper inputs or CarbonRules fragments,
+with partial context in Partial_Mapping or hidden Mapping_Info. Inspect the
+actual installed helper and project reader before using either layout. Report
+unsupported context rather than silently discarding it or declaring completeness.
 
-For a scientifically reviewed reduced Partial mapping, use the existing
-rule_verdict accepted/rejected/unresolved with a matching unchanged/unresolved
-decision. Accepted retains the partial mapper result; rejected or unresolved
-turns its final coverage Unresolved and clears mapped SMILES in the AI copy.
-AIReviewed=TRUE records actual analysis; merely retaining a mapper result does not
-set AIGenerated. Report omitted participants and remaining uncertainty. A complete
-AI replacement needs the full original structures and normal validation.
+These are completion targets, not ready-made successful reviews. Compare the
+original equation, amounts, omissions and carbon positions as described in
+[whole-reaction completion](references/completion-review.md). First attempt a
+validated complete replacement through enzymatic-atom-mapping, including when
+all mappers failed. Do not stop at proving that a CoA/NAD(P) skeleton is retained.
 
-### Review deterministic carbon rules
+If a complete replacement remains blocked, document the attempted completion,
+exact missing groups and scientific or interface reason. Only when the installed
+project supports partial propagation may scientifically supported existing pairs
+be retained with rule_verdict=accepted and decision=unchanged. This accepts those
+pairs only; report the reaction as unresolved completion, never a fully repaired
+mapping. AIReviewed=TRUE records actual analysis; retaining pairs alone does not
+set AIGenerated. Unsupported or uncertain existing pairs use rule_verdict=rejected
+or unresolved and decision=unresolved; the helper disables them in the AI copy.
+A complete validated replacement supersedes the legacy fragment.
 
-For newer workbooks, Final_Mapping contains every reaction. MappingCoverage is
-Complete, Partial, Unresolved, Boundary or NoCarbon. Partial_Mapping records exact carbon
-positions, structures, transfer amounts, direction and rule version. CarbonRules
-fallbacks may include a reduced mapped subreaction: this omits unresolved
-participants and uses unit molecular copies. Compare it with Partial_Mapping and
-the original equation; original decimal amounts remain in TransferCoefficient.
-Do not mistake it for a complete mapping of the original reaction. Fallbacks
-require review even when the code finds a unique match; AIGenerated
-remains FALSE. Review these records with enzymatic-atom-mapping even when a whole
-ReactionSMILES cannot be formed (for example, fractional biomass reactions).
-Consult the project's `docs/carbon-mapping-rules.md` when available for biomass
-modeling context and primary references. A protein/RNA/lipid/biomass pool is not
-a specified molecular structure; do not substitute a monomer for a whole pool.
-Assess each saved donor/product carbon pair, the amount, competing interpretations
-and whether skeleton retention is biochemically valid. Do not infer validity from
-matching names, confidence scores or an automated uniqueness check alone.
-Inspect extracted metabolite formulas and structures. A formula/SMILES carbon-count
-mismatch can indicate a wrong identity or an unspecified polymer repeat unit.
-Do not override it with mapper priority. Report the upstream structure/assembly
-requirement; ordinary correspondence edits cannot repair input structures; use the explicit structure-completion stage for missing structures, and report existing incorrect annotations for separate correction.
+When the project has disabled partial mapping, do not restore the feature,
+create partial sheets/hidden records, or imply that retained fragments will be
+used downstream. Preserve old input audit data without treating it as usable
+coverage. Report any helper incompatibility; do not independently refactor the
+computation project.
 
-Use an explicit rule_verdict in each scientific non-replacement rule review:
-accepted, rejected or unresolved. Accepted means retaining the existing partial
-correspondences, not accepting an entire unbalanced reaction as mapped. Rejected
-or unresolved scientifically reviewed rules are disabled in the AI copy by setting
-Final_Mapping.MappingCoverage=Unresolved and clearing mapped SMILES. The helper
-does this; retained Partial_Mapping records are audit context only. Automated
-triage has AIReviewed=FALSE and supplies no rule verdict. If some pairs cannot be
-supported, disable that reaction's fallback rather than inventing a complete map
-or silently keeping an unsupported subset. A validated complete AI replacement
-instead sets MappingCoverage=Complete and supersedes stored rules.
-
-A mapper's carbon-only view can also be Partial, with its sparse correspondence
-in MappedReactionSMILES. Inspect missing carbon positions; never treat it as a
-complete atom map. Preserve raw mapper records. Only Final_Mapping changes in an
-AI copy; preserve Partial_Mapping and Mapping_Selection as original audit records.
+Inspect formula/SMILES conflicts, generic pools and carrier roles using original
+identities. Neither a matching name, formula, mapper priority nor a unique graph
+match proves the missing correspondence. Manual records retain precedence but
+remain subject to scientific assessment. Only Final_Mapping changes during
+correspondence review; preserve the original selection and raw predictions.
 
 ## Write reviewed copies
 

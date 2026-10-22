@@ -34,10 +34,22 @@ ReactionSMILES remains a target with equation and metabolite context. Report the
 reason if no supported replacement can be generated. Do not invent structures.
 
 CarbonRules may save a reduced mapped subreaction. Its original coefficients and
-position pairs are in Partial_Mapping; it is not a complete original-reaction map.
+position pairs are in saved partial correspondence records; it is not a complete original-reaction map.
 During correspondence review, only Final_Mapping may change relative to its staged input; a preceding explicit structure-completion stage has the separate contract below. New step 3 reads that copy for both
 Enumeration and size-1 EMU-inspired source balances in a single result workbook.
 Inspect the installed project: older projects may support Enumeration only.
+
+## Whole-reaction completion before a verdict
+
+Follow [the completion review](completion-review.md) for every incomplete target.
+The original equation and coefficients define completeness, even when raw mapper
+ReactionSMILES contain only a subreaction. Attempt missing carbon correspondences
+before retaining a fragment; CO2 and other small products are not exempt.
+Record the omitted groups, completion attempt, evidence, remaining gaps and
+validation/interface blockers in the existing rationale and limitations fields.
+Do not add a separate proposal schema or treat a retained partial as a repaired
+reaction. Legacy partial verdicts below apply only when the installed project
+supports them; never re-enable disabled partial propagation.
 
 ## Proposal file
 
@@ -240,10 +252,12 @@ review real reactions or change project results.
 Inspect includes `final` and `partial_mappings` for each target. On compatible
 projects every original reaction is in Final_Mapping. Rule-derived Partial rows
 may show a reduced unit mapped subreaction; their original amounts and exact
-atom-index pairs are in Partial_Mapping. It is not a full original-reaction map. Missing
+atom-index pairs are in saved partial correspondence records. It is not a full original-reaction map. Missing
 whole ReactionSMILES does not prevent scientific review of those pairs.
 
-For a scientific rule review, supply a non-replacement review such as:
+Only after a documented complete-mapping attempt remains blocked, and only if
+legacy partial propagation is supported, a scientific non-replacement review may
+use the following form. It records unresolved completion, not a completed repair:
 
 ```json
 {
@@ -251,7 +265,7 @@ For a scientific rule review, supply a non-replacement review such as:
   "decision": "unchanged",
   "AIReviewed": true,
   "rule_verdict": "accepted",
-  "rationale": "Explain evidence supporting each stored carbon transfer.",
+  "rationale": "Record the whole-reaction completion attempt, its blocker and evidence supporting the retained pairs.",
   "evidence": [],
   "limitations": ["Only the listed carbon skeletons are resolved."]
 }
@@ -264,7 +278,7 @@ clearing mapped SMILES. ReviewRequired stays TRUE and AIGenerated stays FALSE fo
 unchanged rule rows. A full replacement uses the existing replacements schema
 and sets MappingCoverage=Complete. Do not submit both forms for one reaction.
 Without scientific review, use AIReviewed=FALSE and omit rule_verdict. The skill
-never edits Partial_Mapping, Mapping_Selection or raw predictions.
+never edits saved partial correspondence records, Mapping_Selection or raw predictions.
 
 
 ## Structure-completed input exception
@@ -294,3 +308,8 @@ Only successfully applied proposals enter this table. Source and target are stor
 in original equation direction; reverse-flux workbook mappings are reversed for
 this index. It does not automatically override step-2 choices. Use immutable
 exact-context archives for validated reuse; preserve separate manual data.
+
+Partial context may be stored in an older Partial_Mapping sheet or in hidden
+Mapping_Info rows with RecordType=PartialMapping. Inspect the installed helper's
+supported layouts; report a compatibility gap instead of asserting coverage.
+Do not recreate partial outputs in a project that has disabled that feature.

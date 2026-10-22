@@ -55,9 +55,10 @@ are in English.
 4. Re-extract the review queue and use enzymatic-atom-mapping for every flagged,
    blank or missing mapping and all newly affected reactions. Empty or failed
    mapper output does not prevent an evidence-based mapping attempt.
-5. Validate replacement proposals and decisions. New AI replacements must cover
-   the complete supplied reaction; reviewed existing partial maps can be retained
-   as Partial. Unresolved atoms and generic pools are not fabricated.
+5. Attempt completion of the original reaction, including omitted carbon-bearing
+   groups, small products and repeated molecules. Validate complete replacements.
+   A supported legacy fragment is not a completed repair; report remaining gaps
+   and blockers instead of fabricating atoms or generic-pool structures.
 6. Save a separate reviewed workbook, verify it and write detailed outcome reports.
 7. Save accepted discoveries and evidence for later validated reuse.
 8. Run step 3 for the supplied models, verify current outputs and link them in the
@@ -88,8 +89,10 @@ validation. Unknown chemical identities remain unresolved.
 
 In Final_Mapping, AIReviewed means scientific analysis occurred. AIGenerated means
 an accepted replacement was applied. ReviewRequired is preserved by default.
-These flags do not certify correctness. Scientific review can retain an existing
-partial mapping without generating a complete replacement or setting AIGenerated.
+These flags do not certify correctness or complete coverage. Before retaining a
+legacy partial map, review must attempt whole-reaction completion and explain
+any blocker. Legacy partial retention requires support in the installed project;
+it does not count as a completed repair or set AIGenerated.
 Boundary/NoCarbon rows do not require mapping solely because their SMILES is blank.
 No targets means a reported no-op, not an artificial AI copy.
 
@@ -98,6 +101,8 @@ No targets means a reported no-op, not an artificial AI copy.
 [SKILL.md](SKILL.md) defines the agent workflow.
 [Workbook handoff](references/workbook-handoff.md) documents inspect/apply commands,
 proposal/review JSON and output validation.
+[Whole-reaction completion](references/completion-review.md) defines the carbon
+accounting audit and completion obligations, including omitted CO2 products.
 [Structure completion](references/structure-completion.md) documents identity
 proposals, affected-reaction remapping and staging provenance.
 
