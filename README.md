@@ -73,8 +73,9 @@ Keep the original equations, signed fluxes and SourceInputSHA256 throughout.
 
 - `<model>_2_atom_mapping_AIGenerated.xlsx`: a separate reviewed copy; existing
   deliveries are not silently overwritten.
-- `AI_mapping_review_<timestamp>.md`: a summary table, the list of added/corrected
-  compound SMILES, applied reaction-mapping changes and delivered-file links.
+- `AI_mapping_review_<model>_<timestamp>.md`: one report per input model/condition,
+  combining its summary, added/corrected SMILES, applied reaction-mapping changes
+  and delivered-file links. Batch requests produce separate model reports.
   No long per-reaction analyses or unchanged/unresolved reaction listings.
 - Matching `.json`: exact queue counts, machine checks and unfinished ReactionIDs
   for continuation. An incomplete review returns exit code 2; writing a copy or
@@ -99,8 +100,10 @@ any blocker. Legacy partial retention requires support in the installed project;
 it does not count as a completed repair or set AIGenerated.
 Boundary/NoCarbon rows do not require mapping solely because their SMILES is blank.
 No targets means a reported no-op, not an artificial AI copy.
-The conversation briefly reports added/corrected SMILES and applied mapping
-replacements, with a report link and an incomplete-review reminder if necessary.
+The conversation reports each model/condition separately: its initial target
+count, actual reviewed count, added/corrected SMILES, applied mapping replacements
+and its own report link. An incomplete model gets a short remaining-count reminder.
+Different models' counts are not substituted with batch totals.
 Unprocessed rows are not presented as AI findings; no accuracy comparison is
 implied by the number of changes.
 

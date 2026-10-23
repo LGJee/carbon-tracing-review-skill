@@ -926,8 +926,12 @@ def completed_structure_changes(source, workbook_hash):
 
 def write_delivery_report(reports, directory):
     """Keep the readable report to a summary and applied changes; JSON keeps the audit."""
+    if len(reports) != 1:
+        raise ValueError("Write one report per input workbook; do not combine models")
     directory.mkdir(parents=True, exist_ok=True)
-    stem = "AI_mapping_review_" + datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    source = Path(reports[0].get("input_file") or "Unknown_input")
+    label = re.sub(r"[^A-Za-z0-9_.-]", "_", re.sub(r"_2_atom_mapping$", "", source.stem))
+    stem = "AI_mapping_review_" + label + "_" + datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     json_path, text_path = directory / (stem + ".json"), directory / (stem + ".md")
     fields = ("scientifically_reviewed", "replaced", "retained", "unresolved")
     lines = ["# AI-assisted atom mapping review", "",
@@ -1084,14 +1088,17 @@ def main(argv=None):
                                 for row in report)
             else "complete" if any(row["target_counts"]["targets"] for row in report)
             else "no_targets")
-        try:
-            source = Path(entries[0]["input_file"]).resolve()
-            project = find_project(args.project, [source])
-            delivery["report_files"] = write_delivery_report(
-                report, output_directory(args.output_dir, project, source)
-            )
-        except (OSError, ValueError, KeyError, TypeError) as error:
-            delivery["report_error"] = str(error)
+        delivery["report_files"] = []
+        for item in report:
+            try:
+                source = Path(item.get("input_file") or "Unknown_input").resolve()
+                project = find_project(args.project, [source])
+                paths = write_delivery_report(
+                    [item], output_directory(args.output_dir, project, source))
+                delivery["report_files"].append(dict(input_file=item.get("input_file"), **paths))
+            except (OSError, ValueError, KeyError, TypeError) as error:
+                item["report_error"] = str(error)
+                delivery["report_error"] = "One or more per-model reports could not be saved"
     print(json.dumps(delivery, indent=2, default=str, allow_nan=False))
     return (
         2

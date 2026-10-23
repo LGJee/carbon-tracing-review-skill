@@ -140,16 +140,20 @@ is added only for an accepted complete map, not for review metadata alone.
 
 ## Results reports
 
-`apply` automatically writes `AI_mapping_review_<timestamp>.md` and `.json` to
-the configured results/output directory, including zero-replacement and partial
-failure runs. Their paths are returned in `report_files`; a write failure is
-returned as `report_error` with a nonzero exit status. When one invocation spans
-several input directories, reports go to the explicit output directory or the
-first input's resolved results directory. Do not overwrite previous reports.
+`apply` writes one `AI_mapping_review_<model>_<timestamp>.md` and matching audit
+JSON per input workbook, including zero-replacement and failed inputs. One model's
+SMILES and mapping changes stay in the same readable report. Never combine models
+into one report. Reports go to the explicit output directory or each input's own
+resolved results directory; previous files are not overwritten.
+
+`report_files` is always a list, including single-input runs. Each entry has
+`input_file`, `markdown` and `json`, so consumers can associate paths with models.
+A report write failure is recorded on that workbook as `report_error` with a
+nonzero invocation exit status; other models' reports still get delivered.
 
 The Markdown is a fuller version of the brief conversation, with only:
 
-1. The per-workbook and total summary table.
+1. The summary table for this model only.
 2. SMILES changes: model, metabolite ID/name, change type and new SMILES.
 3. Applied mapping changes: model, ReactionID, reaction name and equation.
 4. Delivered workbook and detailed JSON links.
@@ -187,9 +191,12 @@ successful targets. A complete review can still contain scientifically unresolve
 reactions. Keep continuation metadata when working in batches; do not stop after
 an initial subset without a real blocker or explicit user limit.
 
-The conversation should only state added/corrected SMILES, applied mapping
-replacements and the report link, plus a short reminder if incomplete. Do not add
-accuracy or coverage comparisons or enumerate unprocessed rows as AI results.
+The conversation must have a separate concise block per model/condition, giving
+that model's initial target count, actual reviewed count, added/corrected SMILES,
+applied mapping replacements and its own report link. Add that model's remaining
+count only as a short incomplete-review reminder. Do not replace these blocks
+with batch-wide totals, add accuracy/coverage comparisons, or enumerate unprocessed
+rows as AI results.
 
 ## Persistent review records
 

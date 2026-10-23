@@ -491,9 +491,39 @@ class WorkbookTests(unittest.TestCase):
         self.assertTrue(Path(report[1]["output_file"]).is_file())
         self.assertEqual(review.digest(second), valid["input_sha256"])
         delivery = json.loads(stream.getvalue())
-        self.assertTrue(Path(delivery["report_files"]["markdown"]).is_file())
-        saved = json.loads(Path(delivery["report_files"]["json"]).read_text())
-        self.assertEqual(saved["workbooks"], report)
+        self.assertEqual(len(delivery["report_files"]), 2)
+        self.assertEqual(len(list((self.folder / "out").glob("AI_mapping_review_*.md"))), 2)
+        for files, workbook_report in zip(delivery["report_files"], report):
+            self.assertEqual(files["input_file"], workbook_report["input_file"])
+            self.assertTrue(Path(files["markdown"]).is_file())
+            saved = json.loads(Path(files["json"]).read_text())
+            self.assertEqual(saved["workbooks"], [workbook_report])
+
+    def test_each_model_gets_one_report_combining_its_structure_and_mapping_changes(self):
+        first = self.apply([proposal("r1")], output="first")
+        second_source = self.folder / "Other_Culture_2_atom_mapping.xlsx"
+        fixture(second_source)
+        second = review.apply_workbook(dict(input_file=str(second_source),
+            input_sha256=review.digest(second_source), replacements=[proposal("r1")]),
+            PROJECT, MAPPING_SKILL, self.folder / "second")
+        first["structure_changes"] = [dict(MetaboliteID="m_unique_A", MetaboliteName="Only A[c]",
+                                          action="Added", SMILES="CCO")]
+        second["structure_changes"] = [dict(MetaboliteID="m_unique_B", MetaboliteName="Only B[c]",
+                                           action="Added", SMILES="CCO")]
+        destination = self.folder / "per_model_reports"
+        for own, other in ((first, second), (second, first)):
+            files = review.write_delivery_report([own], destination)
+            text = Path(files["markdown"]).read_text(encoding="utf-8")
+            self.assertIn(own["structure_changes"][0]["MetaboliteName"], text)
+            self.assertNotIn(other["structure_changes"][0]["MetaboliteName"], text)
+            self.assertIn("| r1 | Synthetic fixture |", text)
+            self.assertNotIn(Path(other["input_file"]).name, text)
+            self.assertIn(review.model_name(Path(own["input_file"])), Path(files["markdown"]).name)
+            data = json.loads(Path(files["json"]).read_text(encoding="utf-8"))
+            self.assertEqual(data["workbooks"], [own])
+        self.assertEqual(len(list(destination.glob("*.md"))), 2)
+        with self.assertRaises(ValueError):
+            review.write_delivery_report([first, second], destination)
 
     def test_project_rejects_mismatched_equation_before_writing(self):
         workbook = load_workbook(self.source)
@@ -733,7 +763,7 @@ class WorkbookTests(unittest.TestCase):
         self.assertEqual(report["review_counts"]["scientifically_reviewed"], 0)
         self.assertEqual(report["review_counts"]["remaining"], 3)
         self.assertEqual(set(report["remaining_review_ids"]), {"r1", "r2", "r3"})
-        text = Path(delivery["report_files"]["markdown"]).read_text(encoding="utf-8")
+        text = Path(delivery["report_files"][0]["markdown"]).read_text(encoding="utf-8")
         self.assertNotIn("### r", text)
         self.assertNotIn("Input screening only.", text)
         self.assertIn("review is not complete; 3 reactions", text)

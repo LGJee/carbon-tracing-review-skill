@@ -251,8 +251,11 @@ directory or resolve that file deliberately with the user. If no proposal passes
 report that no replacement was generated. Review-only copies may be delivered
 when review decisions are supplied; their AIGenerated flags stay unchanged.
 
-The apply command saves timestamped `AI_mapping_review_*.md` and `.json` reports
-beside the delivered workbooks, without overwriting earlier reports. Read the
+The apply command saves one timestamped `AI_mapping_review_<model>_*.md`
+report and matching audit JSON per input workbook, beside that model's delivery.
+Combine the model's SMILES and mapping changes in its one readable report; never
+combine different models into a shared report or split one model by change type.
+Existing reports are preserved. `report_files` is a list of per-input paths. Read the
 report requirements in the handoff reference. Keep the readable report to the
 summary table, added/corrected SMILES and applied mapping changes. Do not expand
 unchanged, unresolved or unprocessed reactions there. Full scientific analyses,
@@ -278,9 +281,13 @@ do not relabel unprocessed targets as analyzed. Reuse earlier actual decisions
 only after checking the same input hash and reaction context. Keep earlier
 deliveries; do not bypass existing-output protection.
 
-Keep the conversation brief: state how many SMILES were added/corrected, how many
-mapping replacements were applied, and link the detailed report. Separate sentences
-are fine. Add one short incomplete-review reminder when necessary. Do not list
+In batch requests, use a separate short conversation block for each model/condition;
+never substitute batch-wide totals. State the model name, its initial review target
+count, actual scientifically reviewed count, SMILES additions/corrections, mapping
+replacements and its own report link. Distinguish initial targets from remaining
+work. For incomplete review add one short reminder with that model's remaining
+count. Separate sentences are fine. A typical block is: "Model: X initial targets,
+Y reviewed. Z SMILES added/corrected; W mappings replaced. Report: ..." Do not list
 unprocessed reactions as AI findings or output extra accuracy/coverage comparisons.
 The readable report is a fuller version of the brief conversation: retain the
 summary table, then list which compounds gained/corrected SMILES and which
