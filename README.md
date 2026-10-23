@@ -73,8 +73,11 @@ Keep the original equations, signed fluxes and SourceInputSHA256 throughout.
 
 - `<model>_2_atom_mapping_AIGenerated.xlsx`: a separate reviewed copy; existing
   deliveries are not silently overwritten.
-- `AI_mapping_review_<timestamp>.md` and `.json`: all target outcomes, including
-  retained, unresolved, unassessed and unsuccessful replacements.
+- `AI_mapping_review_<timestamp>.md`: only actual AI analyses and accepted mapping
+  changes, including retained and reviewed-but-unresolved cases.
+- Matching `.json`: exact queue counts, machine checks and unfinished ReactionIDs
+  for continuation. An incomplete review returns exit code 2; writing a copy or
+  screening every input does not mean scientific review is complete.
 - `<model>_3_carbon_flow_AIGenerated.xlsx`: step-3 output for reviewed mappings;
   available original mappings may also produce `<model>_3_carbon_flow.xlsx`.
 - `data/ai_smiles.csv`: Species, MetaboliteName, SMILES, Source.
@@ -95,6 +98,10 @@ any blocker. Legacy partial retention requires support in the installed project;
 it does not count as a completed repair or set AIGenerated.
 Boundary/NoCarbon rows do not require mapping solely because their SMILES is blank.
 No targets means a reported no-op, not an artificial AI copy.
+The conversation briefly reports added/corrected SMILES and applied mapping
+replacements, with a report link and an incomplete-review reminder if necessary.
+Unprocessed rows are not presented as AI findings; no accuracy comparison is
+implied by the number of changes.
 
 ## Interfaces and tests
 

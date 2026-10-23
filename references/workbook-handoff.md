@@ -115,8 +115,10 @@ proposal may have an unresolved review, but cannot be declared unchanged.
 
 Apply independently processes workbooks and reactions. Its JSON report records
 accepted/rejected/missing proposals, validator warnings and whether project
-validation ran. An exit code of 2 signals errors/partial failure; inspect the
-report for successful outputs instead of discarding them. Accepted replacements
+validation ran. An exit code of 2 signals errors or incomplete scientific review, including a
+screening-only remainder; inspect successful outputs and remaining_review_ids
+instead of discarding them. Zero exit status does not imply every map was repaired:
+analyzed but unresolved reactions can complete review. Accepted replacements
 or explicit review decisions produce a separate output workbook. A review-only
 copy retains AIGenerated=FALSE unless that provenance already existed. Neither
 accepted replacements nor explicit reviews means no output workbook. Existing destination files are preserved. Output
@@ -145,22 +147,34 @@ returned as `report_error` with a nonzero exit status. When one invocation spans
 several input directories, reports go to the explicit output directory or the
 first input's resolved results directory. Do not overwrite previous reports.
 
-The Markdown includes per-workbook and total counts, every target's outcome and
-rationale, validation rejections, evidence URLs/access dates, limitations, input
-hashes, and output/archive paths. The JSON preserves complete validation results
-and supplied reviews. Supply all decisions, including automatic triage, rather
-than only successful proposals. Any omitted target remains explicitly unassessed.
+The Markdown lists only reactions actually analyzed by AI: replacements,
+retained mappings and reviewed-but-unresolved cases, with rationale, evidence,
+validation results and limitations. Unprocessed reactions are not AI findings and
+are not expanded in this readable report. An incomplete run gets a short reminder.
 
-Counts are workbook reaction records, not deduplicated chemical transformations.
-Replaced + retained + unresolved + unassessed must equal initial review targets
-(TRUE flags plus missing mappings). The legacy report field flagged counts this union.
-AI-reviewed overlaps those categories; it must not be added to them. Current-run
-replacement counts and scientific-review counts are distinct from saved workbook
-totals if there were pre-existing flags or absent final rows. Do not clear
-ReviewRequired or equate AIReviewed/AIGenerated with experimental correctness.
-State the checks actually run and whether optional propagation was requested/run;
-the helper itself performs no production propagation. If grouping is reported,
-state the grouping key and give unique-group counts separately from workbook rows.
+The JSON retains exact input hashes, outcomes and continuation metadata:
+
+- `target_counts`: TRUE flags in each sheet, their ReactionID union,
+  `missing_mapping_only` and the full queue size `targets`.
+- `review_counts`: actual scientific review and replacement counts, with
+  `remaining` separate from reviewed-but-unresolved decisions.
+- `remaining_review_ids`: targets not scientifically analyzed in this run.
+- `review_status`: `complete`, `incomplete` or `no_targets` per valid workbook.
+
+The legacy `flagged` field counts the target union, not just TRUE flags; use
+`target_counts.review_required_union` for the latter. Reconcile targets =
+scientifically reviewed + remaining. Retained and unresolved counts include only
+actual analysis; screening-only or rejected proposals without scientific review
+remain pending. Existing AIReviewed flags and cache hits do not establish analysis
+in the current run. Counts are workbook records; shared reactions across models
+count separately. Input-processing failures have unknown counts, never zero
+successful targets. A complete review can still contain scientifically unresolved
+reactions. Keep continuation metadata when working in batches; do not stop after
+an initial subset without a real blocker or explicit user limit.
+
+The conversation should only state added/corrected SMILES, applied mapping
+replacements and the report link, plus a short reminder if incomplete. Do not add
+accuracy or coverage comparisons or enumerate unprocessed rows as AI results.
 
 ## Persistent review records
 
@@ -188,7 +202,9 @@ not the distributed skill.
 
 ## Default carbon propagation
 
-The skill agent runs step 3 after validated review delivery by default. The
+The skill agent runs step 3 after completed scientific review and validated
+delivery by default. An incomplete delivery does not trigger propagation unless
+the user explicitly requests running with those disclosed limitations. The
 inspect/apply helpers do not launch propagation. Skip this stage for an explicit
 review-only request or an orchestrator's review-only handoff; report the handoff
 so only the owner runs step 3.

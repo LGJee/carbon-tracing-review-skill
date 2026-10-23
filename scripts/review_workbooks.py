@@ -212,6 +212,58 @@ def review_targets(workbook):
     return targets, issues
 
 
+def target_counts(targets):
+    """Count worksheet flags separately from the union used as the review queue."""
+    def is_true(record):
+        try:
+            return bool(record) and flag(record["ReviewRequired"])
+        except ValueError:
+            return False  # Unknown flags are reported by review_targets, never guessed.
+    selection = {key for key, row in targets.items() if is_true(row["selection"])}
+    final = {key for key, row in targets.items() if is_true(row["final"])}
+    return dict(review_required_selection=len(selection),
+                review_required_final=len(final),
+                review_required_union=len(selection | final),
+                missing_mapping_only=len(set(targets) - selection - final),
+                targets=len(targets))
+
+
+def review_progress(report):
+    """Screening and rejected proposals alone never complete scientific review."""
+    decisions = {identity(row["ReactionID"]): row for row in report.get("reviews", [])}
+    counts = dict(report["target_counts"], scientifically_reviewed=0, replaced=0,
+                  retained=0, unresolved=0, screened_only=0, unassessed=0,
+                  validation_rejected=0)
+    remaining = []
+    for outcome in report["reactions"]:
+        if not outcome["flagged"]:
+            continue
+        key = identity(outcome["ReactionID"])
+        decision = decisions.get(key, {})
+        accepted = outcome["status"] == "accepted"
+        analyzed = accepted or decision.get("AIReviewed") is True
+        counts["scientifically_reviewed"] += int(analyzed)
+        counts["validation_rejected"] += int(outcome["status"] == "rejected")
+        if accepted:
+            counts["replaced"] += 1
+        elif analyzed:
+            counts["retained" if decision["decision"] == "unchanged" else "unresolved"] += 1
+        else:
+            remaining.append(key)
+            counts["screened_only" if decision else "unassessed"] += 1
+    counts["remaining"] = len(remaining)
+    if (counts["scientifically_reviewed"] != report["ai_reviewed"]
+            or counts["replaced"] != report["accepted"]):
+        raise ValueError("Review counts differ from applied scientific decisions")
+    if counts["targets"] != counts["scientifically_reviewed"] + counts["remaining"]:
+        raise ValueError("Review target/progress counts do not reconcile")
+    if counts["targets"] != sum(counts[key] for key in
+            ("replaced", "retained", "unresolved", "screened_only", "unassessed")):
+        raise ValueError("Review outcome counts do not reconcile")
+    status = "no_targets" if not counts["targets"] else "incomplete" if remaining else "complete"
+    return dict(review_counts=counts, remaining_review_ids=remaining, review_status=status)
+
+
 def model_name(path):
     match = re.fullmatch(r"(.+)_2_atom_mapping\.xlsx", path.name)
     if not match or path.name.startswith("~$"):
@@ -791,7 +843,8 @@ def apply_workbook(entry, project=None, mapping_skill=None, output_dir=None):
             input_sha256=before,
             output_file=str(output) if output else None,
             accepted=accepted,
-            flagged=len(targets),
+            flagged=len(targets),  # Legacy field: target union, not TRUE flags alone.
+            target_counts=target_counts(targets),
             ai_reviewed=len(reviewed),
             reviews=reviews,
             project_validation=("passed" if accepted or any(
@@ -813,6 +866,8 @@ def apply_workbook(entry, project=None, mapping_skill=None, output_dir=None):
                             "partial_mappings",
                             "metabolites",
                             "final",
+                            "review_trigger",
+                            "missing_final_row",
                         )
                     }
                     if key in targets
@@ -821,6 +876,7 @@ def apply_workbook(entry, project=None, mapping_skill=None, output_dir=None):
                 for key, row in outcomes.items()
             ],
         )
+        report.update(review_progress(report))
         if proposals or reviews:
             directory = (
                 project if project else output_directory(output_dir, project, source)
@@ -839,115 +895,82 @@ def apply_workbook(entry, project=None, mapping_skill=None, output_dir=None):
 
 
 def write_delivery_report(reports, directory):
-    """Keep readable results and complete per-reaction outcomes together."""
+    """Report verified queue counts and scientific progress without mixing screening in."""
     directory.mkdir(parents=True, exist_ok=True)
     stem = "AI_mapping_review_" + datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     json_path, text_path = directory / (stem + ".json"), directory / (stem + ".md")
+    fields = ("scientifically_reviewed", "replaced", "retained", "unresolved")
     lines = [
-        "# AI-assisted atom mapping review",
-        "",
-        "AIReviewed records reaction-level scientific review, including retained and unresolved maps. "
-        "Automated input screening alone does not count. AIGenerated records accepted replacements only. "
-        "ReviewRequired is preserved; neither flag certifies experimental correctness.",
-        "",
-        "| Model | Flagged | AI reviewed | Replaced | Retained | Unresolved | Unassessed |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "# AI-assisted atom mapping review", "",
+        "This report lists only reactions actually analyzed by AI. "
+        "Accepted replacements are distinguished from retained and unresolved reviewed mappings.", "",
+        "| Model | AI reviewed | Replaced | Retained | Reviewed unresolved | Status |",
+        "| --- | " + " | ".join(["---:"] * len(fields)) + " | --- |",
     ]
-    totals = [0] * 6
+    totals = {key: 0 for key in fields}
     details = []
+    incomplete = False
     for report in reports:
-        source = report.get("input_file", "Unknown input")
-        name = Path(source).name
+        name = Path(report.get("input_file") or "Unknown input").name
         if report.get("error"):
+            incomplete = True
+            lines.append("| " + name.replace("|", "\\|") + " | "
+                         + " | ".join(["unknown"] * len(fields)) + " | failed |")
             details += ["## " + name, "", "Processing error: " + report["error"], ""]
             continue
-        decisions = {row["ReactionID"]: row for row in report.get("reviews", [])}
-        counts = [report["flagged"], report["ai_reviewed"], report["accepted"], 0, 0, 0]
-        details += [
-            "## " + name,
-            "",
-            "Input SHA256: `" + report["input_sha256"] + "`",
-            "",
-            "Reviewed workbook: " + str(report["output_file"]),
-            "",
-            "Archive: " + str(report.get("archive_file", "Not written")),
-            "",
-        ]
+        counts = report["review_counts"]
+        incomplete |= report["review_status"] == "incomplete"
+        for key in fields:
+            totals[key] += counts[key]
+        lines.append("| {} | {} | {} |".format(
+            name.replace("|", "\\|"), " | ".join(str(counts[key]) for key in fields),
+            report["review_status"]))
+        decisions = {identity(row["ReactionID"]): row for row in report.get("reviews", [])}
+        details += ["## " + name, "", "Input SHA256: `" + report["input_sha256"] + "`", "",
+                    "Reviewed workbook: " + str(report["output_file"]), "",
+                    "Archive: " + str(report.get("archive_file", "Not written")), "",
+                    ]
+        if report["remaining_review_ids"]:
+            details += ["Review is not complete: {} reactions still require analysis.".format(
+                len(report["remaining_review_ids"])), ""]
         if report.get("issues") or report.get("archive_error"):
-            details += [
-                "Delivery warnings: "
-                + json.dumps(
-                    {k: report[k] for k in ("issues", "archive_error") if report.get(k)}
-                ),
-                "",
-            ]
+            details += ["Delivery warnings: " + json.dumps(
+                {k: report[k] for k in ("issues", "archive_error") if report.get(k)}), ""]
         for outcome in report["reactions"]:
-            key = outcome["ReactionID"]
-            review = decisions.get(key, {})
-            status = (
-                "replaced"
-                if outcome["status"] == "accepted"
-                else review.get("decision")
-            )
-            if not status:
-                status = (
-                    "unresolved" if outcome["status"] == "rejected" else "unassessed"
-                )
-            if status != "replaced" and outcome["flagged"]:
-                counts[{"unchanged": 3, "unresolved": 4, "unassessed": 5}[status]] += 1
-            details += [
-                "### " + key + " — " + status,
-                "",
-                "AIReviewed (this run): "
-                + str(
-                    outcome["status"] == "accepted" or review.get("AIReviewed", False)
-                ),
-                "",
-                "Reaction: "
-                + str((outcome.get("target") or {}).get("ReactionName", "")),
-                "",
-                "Equation: " + str((outcome.get("target") or {}).get("Equation", "")),
-                "",
-                review.get("rationale")
-                or outcome.get("rationale")
-                or outcome.get("reason", ""),
-                "",
-            ]
-            if "rule_verdict" in review:
-                details += ["Carbon-rule verdict: " + review["rule_verdict"], ""]
+            key = identity(outcome["ReactionID"])
+            decision = decisions.get(key, {})
+            analyzed = outcome["status"] == "accepted" or decision.get("AIReviewed") is True
+            if not analyzed or not outcome["flagged"]:
+                continue  # Unprocessed targets belong to the continuation queue, not AI results.
+            status = "replaced" if outcome["status"] == "accepted" else decision["decision"]
+            target = outcome.get("target") or {}
+            details += ["### " + key + " — " + status, "",
+                        "AIReviewed (this run): " + str(analyzed), "",
+                        "Review trigger: " + str(target.get("review_trigger", "")), "",
+                        "Reaction: " + str(target.get("ReactionName", "")), "",
+                        "Equation: " + str(target.get("Equation", "")), "",
+                        decision.get("rationale") or outcome.get("rationale") or outcome.get("reason", ""), ""]
+            if "rule_verdict" in decision:
+                details += ["Carbon-rule verdict: " + decision["rule_verdict"], ""]
             if outcome["status"] == "rejected":
                 details += ["Validation rejection: " + outcome["reason"], ""]
-            for evidence in review.get("evidence", outcome.get("evidence", [])):
-                details += [
-                    "- {} (accessed {}): {}".format(
-                        evidence.get("url", ""),
-                        evidence.get("accessed_on", ""),
-                        evidence.get("claim", ""),
-                    )
-                ]
-            for limitation in review.get("limitations", outcome.get("limitations", [])):
-                details += ["- Limitation: " + limitation]
+            for evidence in decision.get("evidence", outcome.get("evidence", [])):
+                details += ["- {} (accessed {}): {}".format(evidence.get("url", ""),
+                    evidence.get("accessed_on", ""), evidence.get("claim", ""))]
+            for limitation in decision.get("limitations", outcome.get("limitations", [])):
+                details.append("- Limitation: " + limitation)
             details.append("")
-        assert sum(counts[2:]) == counts[0]
-        totals = [a + b for a, b in zip(totals, counts)]
-        lines.append(
-            "| {} | {} |".format(name.replace("|", "\\|"), " | ".join(map(str, counts)))
-        )
-    lines += [
-        "| Total | " + " | ".join(map(str, totals)) + " |",
-        "",
-        "Counts are workbook records; shared reactions across models are counted separately. "
-        "AI reviewed overlaps the decision categories. Missing final rows remain in this report; "
-        "no unmapped final row is invented solely to hold a flag.",
-        "",
-        "Complete validation results and review metadata: [JSON]("
-        + json_path.name
-        + "). "
-        "Only the checks recorded there were run. Carbon propagation is not performed by this helper.",
-        "",
-    ]
+    status = ("incomplete" if incomplete else "complete"
+              if any(report.get("target_counts", {}).get("targets") for report in reports)
+              else "no_targets")
+    lines += ["| Total | " + " | ".join(str(totals[key]) for key in fields) + " | " + status + " |", "",
+              "Counts are workbook reaction records; shared reactions across models count separately. "
+              "Only actual scientific analysis is included above.", "",
+              "Complete validation results and continuation metadata: [JSON](" + json_path.name + "). "
+              "Carbon propagation is not performed by this helper.", ""]
     with json_path.open("x", encoding="utf-8") as stream:
-        json.dump({"workbooks": reports}, stream, indent=2, allow_nan=False)
+        json.dump({"review_status": status, "totals": totals, "workbooks": reports},
+                  stream, indent=2, allow_nan=False)
     with text_path.open("x", encoding="utf-8") as stream:
         stream.write("\n".join(lines + details))
     return dict(markdown=str(text_path), json=str(json_path))
@@ -1008,6 +1031,7 @@ def main(argv=None):
                         input_sha256=before,
                         model=model,
                         targets=list(targets.values()),
+                        target_counts=target_counts(targets),
                         issues=issues,
                         cache_issues=cache_issues,
                         project=str(project) if project else None,
@@ -1034,6 +1058,11 @@ def main(argv=None):
             report.append(dict(input_file=entry.get("input_file"), error=str(error)))
     delivery = {"workbooks": report}
     if args.command == "apply":
+        delivery["review_status"] = (
+            "incomplete" if any(row.get("error") or row.get("review_status") == "incomplete"
+                                for row in report)
+            else "complete" if any(row["target_counts"]["targets"] for row in report)
+            else "no_targets")
         try:
             source = Path(entries[0]["input_file"]).resolve()
             project = find_project(args.project, [source])
@@ -1048,6 +1077,7 @@ def main(argv=None):
         if delivery.get("report_error")
         or any(
             row.get("error")
+            or row.get("review_status") == "incomplete"
             or row.get("archive_error")
             or row.get("issues")
             or any(r["status"] == "rejected" for r in row.get("reactions", []))

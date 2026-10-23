@@ -253,14 +253,44 @@ when review decisions are supplied; their AIGenerated flags stay unchanged.
 
 The apply command saves timestamped `AI_mapping_review_*.md` and `.json` reports
 beside the delivered workbooks, without overwriting earlier reports. Read the
-report requirements in the handoff reference. Include all flagged reactions,
-including input failures, retained maps, unresolved cases and unassessed targets;
-do not report only successful replacements. Verify counts against saved workbook
+report requirements in the handoff reference. Include all actually analyzed reactions, whether replaced, retained or unresolved.
+Keep unprocessed target IDs in the machine-readable continuation queue rather
+than listing them as AI findings in the readable report. Verify counts against saved workbook
 flags and distinguish current-run counts from pre-existing provenance. Explain
 any difference caused by targets absent from Final_Mapping. Report delivery or
 archive errors explicitly. Give the user the readable report path.
 
+## Completion and user-facing delivery
+
+After structure completion/remapping, use inspect's `target_counts` and exact
+ReactionIDs as the review queue. TRUE flags are unioned across Mapping_Selection
+and Final_Mapping; unflagged mapping gaps are additional targets. Count each ID
+once per workbook, not once per sheet. Do not count screening as scientific review.
+
+Continue through the queue rather than stopping after an initial batch or writing
+screening-only decisions for the rest. Use apply's `remaining_review_ids` to find
+unfinished work. A saved workbook/report is not completion: `review_status` must
+be `complete` or `no_targets`; apply returns exit code 2 while scientific review
+remains incomplete. An analyzed but unresolved reaction does count as reviewed.
+If an actual blocker prevents completion, report it briefly and preserve progress;
+do not relabel unprocessed targets as analyzed. Reuse earlier actual decisions
+only after checking the same input hash and reaction context. Keep earlier
+deliveries; do not bypass existing-output protection.
+
+Keep the conversation brief: state how many SMILES were added/corrected, how many
+mapping replacements were applied, and link the detailed report. Separate sentences
+are fine. Add one short incomplete-review reminder when necessary. Do not list
+unprocessed reactions as AI findings or output extra accuracy/coverage comparisons.
+The readable report lists only actual AI analyses; continuation IDs and exact
+queue counts stay in the machine-readable JSON. Do not claim accuracy improved
+merely because more structures or mappings were supplied.
+
 ## Run step 3 and deliver
+
+Finish the required scientific review before the default propagation handoff.
+An incomplete review must continue or report its actual blocker; do not silently
+start step 3 as if review finished. A user may explicitly request propagation of
+a disclosed partial delivery.
 
 After saved-copy validation and evidence/report delivery, automatically run the
 compatible project's step3_carbon_flow.py. The explicit review-only exception above

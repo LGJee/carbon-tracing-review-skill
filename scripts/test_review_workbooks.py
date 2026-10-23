@@ -678,13 +678,102 @@ class WorkbookTests(unittest.TestCase):
             workbook.close()
         paths = review.write_delivery_report([report], self.folder / "out")
         text = Path(paths["markdown"]).read_text(encoding="utf-8")
-        self.assertIn("| Total | 3 | 2 | 0 | 1 | 2 | 0 |", text)
+        self.assertIn("| Total | 2 | 0 | 1 | 1 | incomplete |", text)
+        self.assertNotIn("### r2", text)
+        self.assertEqual(report["review_counts"]["screened_only"], 1)
+        self.assertEqual(report["remaining_review_ids"], ["r2"])
+        self.assertEqual(report["review_status"], "incomplete")
         self.assertEqual(
             len(json.loads(Path(paths["json"]).read_text())["workbooks"][0]["reviews"]),
             3,
         )
         archive = json.loads(Path(report["archive_file"]).read_text())
         self.assertEqual(archive["reviews"], entry["reviews"])
+
+    def test_true_flags_are_separate_from_missing_only_targets(self):
+        workbook = load_workbook(self.source)
+        try:
+            selection, final = workbook["Mapping_Selection"], workbook["Final_Mapping"]
+            a = {cell.value: cell.column for cell in selection[1]}
+            b = {cell.value: cell.column for cell in final[1]}
+            selection.cell(4, a["ReviewRequired"], False)  # Missing final row, no TRUE flag.
+            selection.cell(6, a["SelectedMappedReactionSMILES"], "")
+            final.cell(5, b["MappedReactionSMILES"], "")
+            targets, issues = review.review_targets(workbook)
+            self.assertFalse(issues)
+            counts = review.target_counts(targets)
+            self.assertEqual(counts, dict(review_required_selection=1, review_required_final=2,
+                review_required_union=2, missing_mapping_only=2, targets=4))
+            self.assertEqual(set(targets), {"r1", "r2", "r3", "r4"})
+            self.assertNotIn("0", targets)
+        finally:
+            workbook.close()
+
+    def test_screening_all_targets_is_incomplete_and_cli_returns_two(self):
+        entry = self.entry([])
+        entry["reviews"] = [dict(ReactionID=key, decision="unresolved", AIReviewed=False,
+            rationale="Input screening only.") for key in ("r1", "r2", "r3")]
+        # A previous TRUE flag is provenance, not scientific analysis in this run.
+        workbook = load_workbook(self.source)
+        review.mark_reviewed(workbook, {"r1"})
+        workbook.save(self.source)
+        workbook.close()
+        entry["input_sha256"] = review.digest(self.source)
+        self.before = entry["input_sha256"]
+        proposals = self.folder / "screening.json"
+        proposals.write_text(json.dumps(dict(workbooks=[entry])), encoding="utf-8")
+        stream = StringIO()
+        with redirect_stdout(stream):
+            result = review.main(["apply", str(proposals), "--project", str(PROJECT),
+                "--mapping-skill", str(MAPPING_SKILL), "--output-dir", str(self.folder / "out")])
+        self.assertEqual(result, 2)
+        delivery = json.loads(stream.getvalue())
+        self.assertEqual(delivery["review_status"], "incomplete")
+        report = delivery["workbooks"][0]
+        self.assertEqual(report["review_counts"]["scientifically_reviewed"], 0)
+        self.assertEqual(report["review_counts"]["remaining"], 3)
+        self.assertEqual(set(report["remaining_review_ids"]), {"r1", "r2", "r3"})
+        text = Path(delivery["report_files"]["markdown"]).read_text(encoding="utf-8")
+        self.assertNotIn("### r", text)
+        self.assertNotIn("Input screening only.", text)
+        self.assertIn("Review is not complete: 3 reactions", text)
+
+    def test_complete_reviews_and_no_targets_have_success_exit_status(self):
+        entry = self.entry([])
+        entry["reviews"] = [dict(ReactionID=key, decision="unresolved", AIReviewed=True,
+            rationale="Scientific analysis found insufficient evidence for a replacement.")
+            for key in ("r1", "r2", "r3")]
+        for no_targets in (False, True):
+            if no_targets:
+                workbook = load_workbook(self.source)
+                for sheet, field in (("Mapping_Selection", "SelectedMappedReactionSMILES"),
+                                     ("Final_Mapping", "MappedReactionSMILES")):
+                    columns = {cell.value: cell.column for cell in workbook[sheet][1]}
+                    for cells in workbook[sheet].iter_rows(min_row=2):
+                        workbook[sheet].cell(cells[0].row, columns["ReviewRequired"], False)
+                        workbook[sheet].cell(cells[0].row, columns[field], MAPPED)
+                # Restore the deliberately missing final row from the fixture.
+                row = list(next(workbook["Final_Mapping"].iter_rows(min_row=2, max_row=2, values_only=True)))
+                row[0] = "r2"
+                row[7] = "B[c] -> C[c]"
+                workbook["Final_Mapping"].append(row)
+                workbook.save(self.source)
+                workbook.close()
+                entry["reviews"] = []
+                entry["input_sha256"] = review.digest(self.source)
+                self.before = entry["input_sha256"]
+            proposals = self.folder / ("none.json" if no_targets else "complete.json")
+            proposals.write_text(json.dumps(dict(workbooks=[entry])), encoding="utf-8")
+            stream = StringIO()
+            with redirect_stdout(stream):
+                result = review.main(["apply", str(proposals), "--project", str(PROJECT),
+                    "--mapping-skill", str(MAPPING_SKILL), "--output-dir",
+                    str(self.folder / ("none" if no_targets else "complete"))])
+            self.assertEqual(result, 0, stream.getvalue())
+            report = json.loads(stream.getvalue())["workbooks"][0]
+            self.assertEqual(report["review_status"], "no_targets" if no_targets else "complete")
+            self.assertEqual(report["remaining_review_ids"], [])
+            self.assertEqual(report["review_counts"]["unresolved"], 0 if no_targets else 3)
 
     def test_bad_review_metadata_cannot_mark_a_row(self):
         for changes in (
@@ -734,7 +823,10 @@ class WorkbookTests(unittest.TestCase):
         report = self.apply([proposal("r1", "[CH4:1]>>[CH4:1]"), proposal("r4")])
         paths = review.write_delivery_report([report], self.folder / "reports")
         text = Path(paths["markdown"]).read_text(encoding="utf-8")
-        self.assertIn("| Total | 3 | 0 | 0 | 0 | 1 | 2 |", text)
+        self.assertIn("| Total | 0 | 0 | 0 | 0 | incomplete |", text)
+        self.assertNotIn("### r1", text)
+        self.assertEqual(report["review_counts"]["validation_rejected"], 1)
+        self.assertEqual(set(report["remaining_review_ids"]), {"r1", "r2", "r3"})
         second = review.write_delivery_report([report], self.folder / "reports")
         self.assertNotEqual(paths, second)
         self.assertTrue(Path(paths["markdown"]).is_file())
