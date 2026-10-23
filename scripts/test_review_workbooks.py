@@ -500,7 +500,7 @@ class WorkbookTests(unittest.TestCase):
         self.assertEqual(review.digest(second), valid["input_sha256"])
         delivery = json.loads(stream.getvalue())
         self.assertEqual(len(delivery["report_files"]), 2)
-        self.assertEqual(len(list((self.folder / "out" / "reports").glob("*.md"))), 1)
+        self.assertEqual(len(list((self.folder / "out" / "Ai_reports").glob("*.md"))), 1)
         self.assertFalse(list((self.folder / "out").glob("*.json")))
         for files, workbook_report in zip(delivery["report_files"], report):
             self.assertEqual(files["input_file"], workbook_report["input_file"])
@@ -530,7 +530,7 @@ class WorkbookTests(unittest.TestCase):
             self.assertIn(review.model_name(Path(own["input_file"])), Path(files["markdown"]).name)
             data = json.loads(Path(files["json"]).read_text(encoding="utf-8"))
             self.assertEqual(data["workbooks"], [own])
-        self.assertEqual(len(list((destination / "reports").glob("*.md"))), 2)
+        self.assertEqual(len(list((destination / "Ai_reports").glob("*.md"))), 2)
         self.assertFalse(list(destination.glob("*.md")))
         self.assertFalse(list(destination.glob("*.json")))
         with self.assertRaises(ValueError):
@@ -552,8 +552,8 @@ class WorkbookTests(unittest.TestCase):
         self.assertNotEqual(files["json"], second["json"])
         cache = isolated_project / ".cache/ai"
         self.assertIn(cache, Path(files["json"]).parents)
-        self.assertEqual(Path(second["markdown"]).parent, destination / "reports")
-        self.assertEqual(len(list((destination / "reports").glob("*.md"))), 1)
+        self.assertEqual(Path(second["markdown"]).parent, destination / "Ai_reports")
+        self.assertEqual(len(list((destination / "Ai_reports").glob("*.md"))), 1)
         self.assertTrue(list(cache.rglob("previous_report.md")))
         shutil.rmtree(str(cache))
         self.assertEqual(Path(second["markdown"]).read_bytes(), first_content)
@@ -569,7 +569,7 @@ class WorkbookTests(unittest.TestCase):
         files = review.write_delivery_report([failed], destination)
         self.assertIn(destination / ".cache/ai", Path(files["markdown"]).parents)
         self.assertEqual(Path(first["markdown"]).read_bytes(), before)
-        self.assertEqual(len(list((destination / "reports").glob("*.md"))), 1)
+        self.assertEqual(len(list((destination / "Ai_reports").glob("*.md"))), 1)
 
     def test_project_rejects_mismatched_equation_before_writing(self):
         workbook = load_workbook(self.source)
@@ -858,7 +858,7 @@ class WorkbookTests(unittest.TestCase):
         report = review.apply_workbook(entry, PROJECT, MAPPING_SKILL, self.folder / "out")
         report["structure_changes"] = [dict(MetaboliteID="test_met", MetaboliteName="A|name[c]",
                                               action="Added", SMILES="CCO")]
-        paths = review.write_delivery_report([report], self.folder / "reports")
+        paths = review.write_delivery_report([report], self.folder / "Ai_reports")
         text = Path(paths["markdown"]).read_text(encoding="utf-8")
         self.assertIn("test_met | A\\|name[c] | Added | CCO", text)
         self.assertIn("| r1 | Synthetic fixture | A[c] -> B[c] |", text)
@@ -939,13 +939,13 @@ class WorkbookTests(unittest.TestCase):
 
     def test_report_separates_unassessed_and_validation_rejections(self):
         report = self.apply([proposal("r1", "[CH4:1]>>[CH4:1]"), proposal("r4")])
-        paths = review.write_delivery_report([report], self.folder / "reports")
+        paths = review.write_delivery_report([report], self.folder / "Ai_reports")
         text = Path(paths["markdown"]).read_text(encoding="utf-8")
         self.assertIn("| Total | 0 | 0 | 0 | 0 | incomplete |", text)
         self.assertNotIn("### r1", text)
         self.assertEqual(report["review_counts"]["validation_rejected"], 1)
         self.assertEqual(set(report["remaining_review_ids"]), {"r1", "r2", "r3"})
-        second = review.write_delivery_report([report], self.folder / "reports")
+        second = review.write_delivery_report([report], self.folder / "Ai_reports")
         self.assertNotEqual(paths, second)
         self.assertTrue(Path(paths["markdown"]).is_file())
 

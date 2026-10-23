@@ -73,7 +73,7 @@ Keep the original equations, signed fluxes and SourceInputSHA256 throughout.
 
 - `<model>_2_atom_mapping_AIGenerated.xlsx`: a separate reviewed copy; existing
   deliveries are not silently overwritten.
-- `reports/<model>_mapping_review.md`: one final report per input model/condition,
+- `Ai_reports/<model>_mapping_review.md`: one final report per input model/condition,
   combining its summary, SMILES changes, applied mapping changes and file links.
   No long per-reaction analyses or unchanged/unresolved reaction listings.
 - `.cache/ai/review/<run>/`: process JSON, retry reports and previous report
@@ -145,7 +145,7 @@ stages.
 
 Disposable AI workflow/setup/review/reaction files belong in the selected
 project's `.cache/ai/`, grouped by stage and run. Final Excel stays in the case
-output directory; final readable reports stay in its reports/ subfolder. Original
+output directory; final readable reports stay in its Ai_reports/ subfolder. Original
 models, reproducible scripts/plans, adopted chemistry CSVs and scientific evidence
 archives remain outside cache. After runs stop, users may delete .cache/ai/;
 this drops temporary progress without deleting final results. Existing work is

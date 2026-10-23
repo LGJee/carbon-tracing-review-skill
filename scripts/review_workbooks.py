@@ -946,7 +946,7 @@ def write_delivery_report(reports, directory, project=None):
     work = ai_work_directory(project, directory, "review")
     json_path = work / (stem + ".json")
     run_text = work / (stem + ".md")
-    text_path = directory / "reports" / (label + "_mapping_review.md")
+    text_path = directory / "Ai_reports" / (label + "_mapping_review.md")
     fields = ("scientifically_reviewed", "replaced", "retained", "unresolved")
     lines = ["# AI-assisted atom mapping review", "",
         "| Model | AI reviewed | Replaced | Retained | Reviewed unresolved | Status |",

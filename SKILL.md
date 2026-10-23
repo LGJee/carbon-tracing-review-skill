@@ -212,7 +212,7 @@ review, structures or enzymatic-mapping. Reuse the orchestrator's supplied run
 folder when available. Do not put these process files in the results root.
 
 Keep final workbooks in the selected case output directory and readable final
-reports under its `reports/` subfolder. Preserve reproducible preparation scripts
+reports under its `Ai_reports/` subfolder. Preserve reproducible preparation scripts
 and analysis plans with the case. Downloaded models, adopted AI/manual chemistry
 CSVs and immutable evidence supporting adopted records remain in `data/`; they
 are not disposable cache. Do not move the only copy of a prior final delivery or
@@ -273,7 +273,7 @@ directory or resolve that file deliberately with the user. If no proposal passes
 report that no replacement was generated. Review-only copies may be delivered
 when review decisions are supplied; their AIGenerated flags stay unchanged.
 
-The apply command keeps one final reports/<model>_mapping_review.md per model,
+The apply command keeps one final Ai_reports/<model>_mapping_review.md per model,
 combining its SMILES and mapping changes. Retry reports, previous report versions
 and detailed process JSON go under .cache/ai/review/, not in the results root.
 Final report replacement is atomic; the preceding report is retained in cache.

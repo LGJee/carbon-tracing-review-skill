@@ -140,7 +140,7 @@ is added only for an accepted complete map, not for review metadata alone.
 
 ## Results reports
 
-`apply` publishes one reports/<model>_mapping_review.md per valid input workbook
+`apply` publishes one Ai_reports/<model>_mapping_review.md per valid input workbook
 in the explicit output directory or that input's resolved results directory.
 Combine a model's SMILES and mapping changes in that report; never combine models.
 Revisions atomically replace this final report and back up the preceding version
