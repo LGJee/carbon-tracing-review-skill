@@ -147,10 +147,25 @@ returned as `report_error` with a nonzero exit status. When one invocation spans
 several input directories, reports go to the explicit output directory or the
 first input's resolved results directory. Do not overwrite previous reports.
 
-The Markdown lists only reactions actually analyzed by AI: replacements,
-retained mappings and reviewed-but-unresolved cases, with rationale, evidence,
-validation results and limitations. Unprocessed reactions are not AI findings and
-are not expanded in this readable report. An incomplete run gets a short reminder.
+The Markdown is a fuller version of the brief conversation, with only:
+
+1. The per-workbook and total summary table.
+2. SMILES changes: model, metabolite ID/name, change type and new SMILES.
+3. Applied mapping changes: model, ReactionID, reaction name and equation.
+4. Delivered workbook and detailed JSON links.
+
+Keep full mapped SMILES in the workbook and JSON. Do not expand unchanged,
+unresolved or unprocessed reactions, per-reaction reasoning, hashes or validation
+logs in Markdown. An incomplete run gets a short reminder. Preserve those detailed
+analyses, evidence and limitations in JSON instead.
+
+When the input is a structure-completed staging workbook, apply reads its sibling
+`.structures.json` and verifies the staged workbook hash, immutable archive hash,
+parent hash and structure count before listing additions. It does not scan the
+whole AI cache or call old discoveries new. A missing sidecar yields no recorded
+structure changes; an inconsistent sidecar yields a warning and nonzero status.
+The existing completion helper fills missing structures only. A claim that an
+existing SMILES was corrected requires a separate validated correction.
 
 The JSON retains exact input hashes, outcomes and continuation metadata:
 

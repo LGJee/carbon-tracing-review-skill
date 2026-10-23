@@ -736,7 +736,7 @@ class WorkbookTests(unittest.TestCase):
         text = Path(delivery["report_files"]["markdown"]).read_text(encoding="utf-8")
         self.assertNotIn("### r", text)
         self.assertNotIn("Input screening only.", text)
-        self.assertIn("Review is not complete: 3 reactions", text)
+        self.assertIn("review is not complete; 3 reactions", text)
 
     def test_complete_reviews_and_no_targets_have_success_exit_status(self):
         entry = self.entry([])
@@ -774,6 +774,48 @@ class WorkbookTests(unittest.TestCase):
             self.assertEqual(report["review_status"], "no_targets" if no_targets else "complete")
             self.assertEqual(report["remaining_review_ids"], [])
             self.assertEqual(report["review_counts"]["unresolved"], 0 if no_targets else 3)
+
+    def test_readable_report_lists_only_applied_changes_and_keeps_audit_in_json(self):
+        entry = self.entry([proposal("r1")])
+        entry["reviews"] = [dict(ReactionID="r3", decision="unchanged", AIReviewed=True,
+                                rationale="Detailed scientific analysis retained this map.")]
+        report = review.apply_workbook(entry, PROJECT, MAPPING_SKILL, self.folder / "out")
+        report["structure_changes"] = [dict(MetaboliteID="test_met", MetaboliteName="A|name[c]",
+                                              action="Added", SMILES="CCO")]
+        paths = review.write_delivery_report([report], self.folder / "reports")
+        text = Path(paths["markdown"]).read_text(encoding="utf-8")
+        self.assertIn("test_met | A\\|name[c] | Added | CCO", text)
+        self.assertIn("| r1 | Synthetic fixture | A[c] -> B[c] |", text)
+        self.assertNotIn("| r3 |", text)
+        self.assertNotIn("Detailed scientific analysis retained this map.", text)
+        self.assertNotIn("Input SHA256:", text)
+        self.assertNotIn("Carbon-rule verdict:", text)
+        saved = json.loads(Path(paths["json"]).read_text(encoding="utf-8"))["workbooks"][0]
+        self.assertEqual(saved["reviews"], entry["reviews"])
+        accepted = next(row for row in saved["reactions"] if row["status"] == "accepted")
+        self.assertEqual(accepted["MappedReactionSMILES"], MAPPED)
+        self.assertTrue(accepted["evidence"])
+
+    def test_structure_changes_require_matching_workbook_and_immutable_archive(self):
+        import hashlib
+        archive_data = dict(parent_workbook_sha256="a" * 64, structures=[dict(
+            identity=dict(MetaboliteID="m1", MetaboliteName="A[c]"),
+            proposal=dict(SMILES="CCO"))])
+        content = json.dumps(archive_data).encode("utf-8")
+        archive = self.folder / (hashlib.sha256(content).hexdigest() + ".json")
+        archive.write_bytes(content)
+        metadata = dict(output_sha256=self.before, input_sha256="a" * 64,
+                        structure_archive=str(archive), completed_structures=1)
+        sidecar = self.source.with_suffix(".structures.json")
+        sidecar.write_text(json.dumps(metadata), encoding="utf-8")
+        changes = review.completed_structure_changes(self.source, self.before)
+        self.assertEqual(changes, [dict(MetaboliteID="m1", MetaboliteName="A[c]",
+                                        action="Added", SMILES="CCO")])
+        with self.assertRaises(ValueError):
+            review.completed_structure_changes(self.source, "0" * 64)
+        archive.write_bytes(content + b" ")
+        with self.assertRaises(ValueError):
+            review.completed_structure_changes(self.source, self.before)
 
     def test_bad_review_metadata_cannot_mark_a_row(self):
         for changes in (

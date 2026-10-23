@@ -125,10 +125,11 @@ Ordinary correspondence review still changes Final_Mapping only; the explicit
 structure-completion stage is responsible for its other-sheet changes. Do not
 save the staging workbook over an existing original or AI delivery.
 
-Include the structure handoff JSON (`*.structures.json`) and original-workbook
-hash in the English review report. Report compounds missing/resolved/unresolved,
-cache reuse, evidence records, affected reactions, actual mapper submissions and
-results, and any blocked operations. Link the detailed structure archive. If no
+Keep the structure handoff JSON (`*.structures.json`) beside its staging workbook
+so correspondence review can verify and list the added SMILES. The readable report
+only needs the summary and actual compound/reaction changes. Keep original hashes,
+missing/unresolved compounds, cache reuse, evidence, affected reactions, mapper
+submissions/results and blocked operations in the detailed JSON and archive. If no
 reaction-level AI review was performed, state this and do not set AIReviewed or
 AIGenerated merely to produce a file. Keep staging private while an operation is
 in progress; preserve its provenance beside the delivery when needed for audit.

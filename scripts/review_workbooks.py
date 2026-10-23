@@ -778,6 +778,7 @@ def apply_workbook(entry, project=None, mapping_skill=None, output_dir=None):
                 outcomes[key] = dict(
                     ReactionID=key,
                     status="accepted",
+                    MappedReactionSMILES=proposal["MappedReactionSMILES"],
                     checks=checks,
                     evidence=proposal["evidence"],
                     rationale=proposal["rationale"],
@@ -877,6 +878,11 @@ def apply_workbook(entry, project=None, mapping_skill=None, output_dir=None):
             ],
         )
         report.update(review_progress(report))
+        try:
+            report["structure_changes"] = completed_structure_changes(source, before)
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            report["structure_changes"] = []
+            report["structure_report_error"] = str(error)
         if proposals or reviews:
             directory = (
                 project if project else output_directory(output_dir, project, source)
@@ -894,85 +900,100 @@ def apply_workbook(entry, project=None, mapping_skill=None, output_dir=None):
         workbook.close()
 
 
+
+def completed_structure_changes(source, workbook_hash):
+    """Read only structure additions bound to this exact staging workbook and archive."""
+    handoff = source.with_suffix(".structures.json")
+    if not handoff.is_file():
+        return []
+    metadata = json.loads(handoff.read_text(encoding="utf-8"))
+    if metadata["output_sha256"] != workbook_hash:
+        raise ValueError("Structure handoff does not match the reviewed workbook")
+    archive = Path(metadata["structure_archive"])
+    if digest(archive) != archive.stem:
+        raise ValueError("Structure archive hash mismatch")
+    data = json.loads(archive.read_text(encoding="utf-8"))
+    if data["parent_workbook_sha256"] != metadata["input_sha256"]:
+        raise ValueError("Structure archive does not match the handoff parent")
+    changes = [dict(MetaboliteID=row["identity"]["MetaboliteID"],
+                    MetaboliteName=row["identity"]["MetaboliteName"],
+                    SMILES=row["proposal"]["SMILES"], action="Added")
+               for row in data["structures"]]
+    if len(changes) != metadata["completed_structures"]:
+        raise ValueError("Structure change count differs from the verified handoff")
+    return changes
+
+
 def write_delivery_report(reports, directory):
-    """Report verified queue counts and scientific progress without mixing screening in."""
+    """Keep the readable report to a summary and applied changes; JSON keeps the audit."""
     directory.mkdir(parents=True, exist_ok=True)
     stem = "AI_mapping_review_" + datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     json_path, text_path = directory / (stem + ".json"), directory / (stem + ".md")
     fields = ("scientifically_reviewed", "replaced", "retained", "unresolved")
-    lines = [
-        "# AI-assisted atom mapping review", "",
-        "This report lists only reactions actually analyzed by AI. "
-        "Accepted replacements are distinguished from retained and unresolved reviewed mappings.", "",
+    lines = ["# AI-assisted atom mapping review", "",
         "| Model | AI reviewed | Replaced | Retained | Reviewed unresolved | Status |",
-        "| --- | " + " | ".join(["---:"] * len(fields)) + " | --- |",
-    ]
+        "| --- | " + " | ".join(["---:"] * len(fields)) + " | --- |"]
     totals = {key: 0 for key in fields}
-    details = []
+    structures, mappings, outputs, notices = [], [], [], []
     incomplete = False
+    def cell(value):
+        return str(value or "").replace("|", "\\|").replace("\n", " ").replace("\r", " ")
     for report in reports:
         name = Path(report.get("input_file") or "Unknown input").name
         if report.get("error"):
             incomplete = True
-            lines.append("| " + name.replace("|", "\\|") + " | "
-                         + " | ".join(["unknown"] * len(fields)) + " | failed |")
-            details += ["## " + name, "", "Processing error: " + report["error"], ""]
+            lines.append("| " + cell(name) + " | " + " | ".join(["unknown"] * len(fields)) + " | failed |")
+            notices.append(name + ": input processing failed; see JSON.")
             continue
         counts = report["review_counts"]
         incomplete |= report["review_status"] == "incomplete"
         for key in fields:
             totals[key] += counts[key]
-        lines.append("| {} | {} | {} |".format(
-            name.replace("|", "\\|"), " | ".join(str(counts[key]) for key in fields),
-            report["review_status"]))
-        decisions = {identity(row["ReactionID"]): row for row in report.get("reviews", [])}
-        details += ["## " + name, "", "Input SHA256: `" + report["input_sha256"] + "`", "",
-                    "Reviewed workbook: " + str(report["output_file"]), "",
-                    "Archive: " + str(report.get("archive_file", "Not written")), "",
-                    ]
+        lines.append("| {} | {} | {} |".format(cell(name),
+            " | ".join(str(counts[key]) for key in fields), report["review_status"]))
         if report["remaining_review_ids"]:
-            details += ["Review is not complete: {} reactions still require analysis.".format(
-                len(report["remaining_review_ids"])), ""]
-        if report.get("issues") or report.get("archive_error"):
-            details += ["Delivery warnings: " + json.dumps(
-                {k: report[k] for k in ("issues", "archive_error") if report.get(k)}), ""]
+            notices.append(name + ": review is not complete; {} reactions still require analysis.".format(
+                len(report["remaining_review_ids"])))
+        if any(report.get(key) for key in ("issues", "archive_error", "structure_report_error")):
+            notices.append(name + ": delivery or validation warnings; see JSON.")
+        for change in report.get("structure_changes", []):
+            structures.append("| " + " | ".join(cell(value) for value in
+                (name, change["MetaboliteID"], change["MetaboliteName"],
+                 change["action"], change["SMILES"])) + " |")
         for outcome in report["reactions"]:
-            key = identity(outcome["ReactionID"])
-            decision = decisions.get(key, {})
-            analyzed = outcome["status"] == "accepted" or decision.get("AIReviewed") is True
-            if not analyzed or not outcome["flagged"]:
-                continue  # Unprocessed targets belong to the continuation queue, not AI results.
-            status = "replaced" if outcome["status"] == "accepted" else decision["decision"]
+            if outcome["status"] != "accepted" or not outcome["flagged"]:
+                continue
             target = outcome.get("target") or {}
-            details += ["### " + key + " — " + status, "",
-                        "AIReviewed (this run): " + str(analyzed), "",
-                        "Review trigger: " + str(target.get("review_trigger", "")), "",
-                        "Reaction: " + str(target.get("ReactionName", "")), "",
-                        "Equation: " + str(target.get("Equation", "")), "",
-                        decision.get("rationale") or outcome.get("rationale") or outcome.get("reason", ""), ""]
-            if "rule_verdict" in decision:
-                details += ["Carbon-rule verdict: " + decision["rule_verdict"], ""]
-            if outcome["status"] == "rejected":
-                details += ["Validation rejection: " + outcome["reason"], ""]
-            for evidence in decision.get("evidence", outcome.get("evidence", [])):
-                details += ["- {} (accessed {}): {}".format(evidence.get("url", ""),
-                    evidence.get("accessed_on", ""), evidence.get("claim", ""))]
-            for limitation in decision.get("limitations", outcome.get("limitations", [])):
-                details.append("- Limitation: " + limitation)
-            details.append("")
+            mappings.append("| " + " | ".join(cell(value) for value in
+                (name, outcome["ReactionID"], target.get("ReactionName", ""),
+                 target.get("Equation", ""))) + " |")
+        if report.get("output_file"):
+            outputs.append("- " + str(report["output_file"]))
     status = ("incomplete" if incomplete else "complete"
               if any(report.get("target_counts", {}).get("targets") for report in reports)
               else "no_targets")
-    lines += ["| Total | " + " | ".join(str(totals[key]) for key in fields) + " | " + status + " |", "",
-              "Counts are workbook reaction records; shared reactions across models count separately. "
-              "Only actual scientific analysis is included above.", "",
-              "Complete validation results and continuation metadata: [JSON](" + json_path.name + "). "
-              "Carbon propagation is not performed by this helper.", ""]
+    lines += ["| Total | " + " | ".join(str(totals[key]) for key in fields) + " | " + status + " |", ""]
+    lines += [notice for notice in notices] + ([""] if notices else [])
+    lines += ["## SMILES changes", ""]
+    if structures:
+        lines += ["| Model | Metabolite ID | Metabolite | Change | SMILES |",
+                  "| --- | --- | --- | --- | --- |"] + structures + [""]
+    else:
+        lines += ["No structure changes were recorded for this review.", ""]
+    lines += ["## Applied mapping changes", ""]
+    if mappings:
+        lines += ["| Model | ReactionID | Reaction | Equation |",
+                  "| --- | --- | --- | --- |"] + mappings + [""]
+    else:
+        lines += ["No mapping replacements were applied.", ""]
+    lines += ["## Files", ""] + outputs + ["",
+              "Full mapped SMILES are in the reviewed workbooks. Validation, evidence and "
+              "continuation records: [JSON](" + json_path.name + ").", ""]
     with json_path.open("x", encoding="utf-8") as stream:
         json.dump({"review_status": status, "totals": totals, "workbooks": reports},
                   stream, indent=2, allow_nan=False)
     with text_path.open("x", encoding="utf-8") as stream:
-        stream.write("\n".join(lines + details))
+        stream.write("\n".join(lines))
     return dict(markdown=str(text_path), json=str(json_path))
 
 
@@ -1079,6 +1100,7 @@ def main(argv=None):
             row.get("error")
             or row.get("review_status") == "incomplete"
             or row.get("archive_error")
+            or row.get("structure_report_error")
             or row.get("issues")
             or any(r["status"] == "rejected" for r in row.get("reactions", []))
             for row in report

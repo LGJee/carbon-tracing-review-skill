@@ -73,8 +73,9 @@ Keep the original equations, signed fluxes and SourceInputSHA256 throughout.
 
 - `<model>_2_atom_mapping_AIGenerated.xlsx`: a separate reviewed copy; existing
   deliveries are not silently overwritten.
-- `AI_mapping_review_<timestamp>.md`: only actual AI analyses and accepted mapping
-  changes, including retained and reviewed-but-unresolved cases.
+- `AI_mapping_review_<timestamp>.md`: a summary table, the list of added/corrected
+  compound SMILES, applied reaction-mapping changes and delivered-file links.
+  No long per-reaction analyses or unchanged/unresolved reaction listings.
 - Matching `.json`: exact queue counts, machine checks and unfinished ReactionIDs
   for continuation. An incomplete review returns exit code 2; writing a copy or
   screening every input does not mean scientific review is complete.

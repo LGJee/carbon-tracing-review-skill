@@ -7,8 +7,8 @@ description: Review flagged or unmapped carbon-tracing reactions, resolve missin
 
 Review one or more `<model>_2_atom_mapping.xlsx` workbooks. Deliver separate
 `<model>_2_atom_mapping_AIGenerated.xlsx` copies containing accepted replacements.
-Deliver a detailed English Markdown report and complete JSON outcomes in the
-configured results directory, including runs with no accepted replacements.
+Deliver a concise English Markdown change report and complete JSON outcomes in
+the configured results directory, including runs with no accepted replacements.
 After validated review delivery, run the project's step 3 by default. An explicit
 review-only request, including an orchestrator's review-only handoff, stops after
 review; the orchestrator then owns its single step-3 run.
@@ -253,9 +253,10 @@ when review decisions are supplied; their AIGenerated flags stay unchanged.
 
 The apply command saves timestamped `AI_mapping_review_*.md` and `.json` reports
 beside the delivered workbooks, without overwriting earlier reports. Read the
-report requirements in the handoff reference. Include all actually analyzed reactions, whether replaced, retained or unresolved.
-Keep unprocessed target IDs in the machine-readable continuation queue rather
-than listing them as AI findings in the readable report. Verify counts against saved workbook
+report requirements in the handoff reference. Keep the readable report to the
+summary table, added/corrected SMILES and applied mapping changes. Do not expand
+unchanged, unresolved or unprocessed reactions there. Full scientific analyses,
+evidence and unfinished target IDs stay in JSON. Verify counts against saved workbook
 flags and distinguish current-run counts from pre-existing provenance. Explain
 any difference caused by targets absent from Final_Mapping. Report delivery or
 archive errors explicitly. Give the user the readable report path.
@@ -281,8 +282,16 @@ Keep the conversation brief: state how many SMILES were added/corrected, how man
 mapping replacements were applied, and link the detailed report. Separate sentences
 are fine. Add one short incomplete-review reminder when necessary. Do not list
 unprocessed reactions as AI findings or output extra accuracy/coverage comparisons.
-The readable report lists only actual AI analyses; continuation IDs and exact
-queue counts stay in the machine-readable JSON. Do not claim accuracy improved
+The readable report is a fuller version of the brief conversation: retain the
+summary table, then list which compounds gained/corrected SMILES and which
+ReactionIDs had applied mapping changes. Name compounds and show their new SMILES;
+identify changed reactions by ID, name and equation. Full mapped strings remain in
+the reviewed workbook and JSON. Do not expand per-reaction reasoning, retained
+maps, unresolved analyses, hashes or validation logs in Markdown. Those records
+stay in JSON. Structure additions are read from the staged workbook's hash-bound
+`.structures.json` and its immutable archive; never infer new work from the whole
+AI cache. The completion helper only fills missing SMILES; do not report a
+correction unless a separate validated correction actually occurred. Do not claim accuracy improved
 merely because more structures or mappings were supplied.
 
 ## Run step 3 and deliver
