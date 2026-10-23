@@ -140,14 +140,20 @@ is added only for an accepted complete map, not for review metadata alone.
 
 ## Results reports
 
-`apply` writes one `AI_mapping_review_<model>_<timestamp>.md` and matching audit
-JSON per input workbook, including zero-replacement and failed inputs. One model's
-SMILES and mapping changes stay in the same readable report. Never combine models
-into one report. Reports go to the explicit output directory or each input's own
-resolved results directory; previous files are not overwritten.
+`apply` publishes one reports/<model>_mapping_review.md per valid input workbook
+in the explicit output directory or that input's resolved results directory.
+Combine a model's SMILES and mapping changes in that report; never combine models.
+Revisions atomically replace this final report and back up the preceding version
+in the run cache. Input-failure reports stay in cache and cannot replace a prior
+final report. Detailed execution JSON and all timestamped retry Markdown live
+under <project>/.cache/ai/review/<run>/. Without a project, cache is under the chosen
+delivery folder. Scientific evidence supporting adopted records remains in data/.
+A small destination-local atomic-write file is removed after publication.
 
 `report_files` is always a list, including single-input runs. Each entry has
 `input_file`, `markdown` and `json`, so consumers can associate paths with models.
+The Markdown path is a final report (or cached failure report); JSON is disposable
+process data. Do not copy cached JSON or retries back into results/.
 A report write failure is recorded on that workbook as `report_error` with a
 nonzero invocation exit status; other models' reports still get delivered.
 
@@ -362,3 +368,11 @@ must not restore deleted or edited entries. New accepted research may add a new
 record later. Clearing a cache does not alter existing workbooks, manual tables,
 model annotations or the independent database structure_cache.json. AI mapping
 rows remain review candidates, not automatic step-2 overrides.
+
+## Cache cleanup
+
+Delete .cache/ai/ only after its runs stop; no cleanup script is run automatically.
+This discards proposals, logs, retry reports and continuation JSON, not Excel
+results, final reports, case scripts/plans, downloaded models, AI chemistry CSVs
+or scientific evidence archives. Resume/research may need repeating after cache
+cleanup. Do not migrate existing or active work as part of normal review.

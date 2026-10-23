@@ -73,12 +73,11 @@ Keep the original equations, signed fluxes and SourceInputSHA256 throughout.
 
 - `<model>_2_atom_mapping_AIGenerated.xlsx`: a separate reviewed copy; existing
   deliveries are not silently overwritten.
-- `AI_mapping_review_<model>_<timestamp>.md`: one report per input model/condition,
-  combining its summary, added/corrected SMILES, applied reaction-mapping changes
-  and delivered-file links. Batch requests produce separate model reports.
+- `reports/<model>_mapping_review.md`: one final report per input model/condition,
+  combining its summary, SMILES changes, applied mapping changes and file links.
   No long per-reaction analyses or unchanged/unresolved reaction listings.
-- Matching `.json`: exact queue counts, machine checks and unfinished ReactionIDs
-  for continuation. An incomplete review returns exit code 2; writing a copy or
+- `.cache/ai/review/<run>/`: process JSON, retry reports and previous report
+  versions, including exact queue counts, checks and continuation ReactionIDs. An incomplete review returns exit code 2; writing a copy or
   screening every input does not mean scientific review is complete.
 - `<model>_3_carbon_flow_AIGenerated.xlsx`: step-3 output for reviewed mappings;
   available original mappings may also produce `<model>_3_carbon_flow.xlsx`.
@@ -141,3 +140,13 @@ Inspect installed method settings and naming; this skill does not implement a
 propagation engine or upgrade/publish the computation project. The helper scripts
 alone do not perform AI research or launch step 3; the skill coordinates these
 stages.
+
+## AI work cache
+
+Disposable AI workflow/setup/review/reaction files belong in the selected
+project's `.cache/ai/`, grouped by stage and run. Final Excel stays in the case
+output directory; final readable reports stay in its reports/ subfolder. Original
+models, reproducible scripts/plans, adopted chemistry CSVs and scientific evidence
+archives remain outside cache. After runs stop, users may delete .cache/ai/;
+this drops temporary progress without deleting final results. Existing work is
+not automatically relocated, and active caches are never automatically cleared.

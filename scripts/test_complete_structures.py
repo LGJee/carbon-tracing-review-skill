@@ -77,6 +77,13 @@ class CompletionTests(unittest.TestCase):
         patcher = patch.object(review, "index_ai_mappings", side_effect=save_index)
         patcher.start()
         self.addCleanup(patcher.stop)
+    def test_default_structure_work_directory_uses_ai_cache(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            work = review.ai_work_directory(root, root / "results", "structures")
+            self.assertIn(root / ".cache/ai/structures", work.parents)
+            self.assertFalse((root / "results").exists())
+
     def test_completed_reduced_input_is_remapped_and_still_requires_review(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

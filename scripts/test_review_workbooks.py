@@ -176,6 +176,14 @@ class WorkbookTests(unittest.TestCase):
         index_patcher = patch.object(review, "index_ai_mappings", side_effect=save_index)
         index_patcher.start()
         self.addCleanup(index_patcher.stop)
+        work_directory = review.ai_work_directory
+        def isolated_work(project, fallback, stage):
+            if project == PROJECT:
+                project = self.folder / "isolated-project"
+            return work_directory(project, fallback, stage)
+        cache_patcher = patch.object(review, "ai_work_directory", side_effect=isolated_work)
+        cache_patcher.start()
+        self.addCleanup(cache_patcher.stop)
 
     def test_reduced_mapper_context_acceptance_rejection_and_complete_guard(self):
         import pandas as pd
@@ -492,7 +500,8 @@ class WorkbookTests(unittest.TestCase):
         self.assertEqual(review.digest(second), valid["input_sha256"])
         delivery = json.loads(stream.getvalue())
         self.assertEqual(len(delivery["report_files"]), 2)
-        self.assertEqual(len(list((self.folder / "out").glob("AI_mapping_review_*.md"))), 2)
+        self.assertEqual(len(list((self.folder / "out" / "reports").glob("*.md"))), 1)
+        self.assertFalse(list((self.folder / "out").glob("*.json")))
         for files, workbook_report in zip(delivery["report_files"], report):
             self.assertEqual(files["input_file"], workbook_report["input_file"])
             self.assertTrue(Path(files["markdown"]).is_file())
@@ -521,9 +530,46 @@ class WorkbookTests(unittest.TestCase):
             self.assertIn(review.model_name(Path(own["input_file"])), Path(files["markdown"]).name)
             data = json.loads(Path(files["json"]).read_text(encoding="utf-8"))
             self.assertEqual(data["workbooks"], [own])
-        self.assertEqual(len(list(destination.glob("*.md"))), 2)
+        self.assertEqual(len(list((destination / "reports").glob("*.md"))), 2)
+        self.assertFalse(list(destination.glob("*.md")))
+        self.assertFalse(list(destination.glob("*.json")))
         with self.assertRaises(ValueError):
             review.write_delivery_report([first, second], destination)
+
+    def test_ai_cache_is_disposable_and_retry_keeps_one_final_model_report(self):
+        import shutil
+        report = self.apply([proposal("r1")], output="delivery")
+        destination = self.folder / "delivery"
+        isolated_project = self.folder / "clean-project"
+        data = isolated_project / "data"
+        data.mkdir(parents=True)
+        reusable = data / "ai_smiles.csv"
+        reusable.write_text("Species,MetaboliteName,SMILES,Source\n", encoding="utf-8")
+        files = review.write_delivery_report([report], destination, project=isolated_project)
+        first_content = Path(files["markdown"]).read_bytes()
+        second = review.write_delivery_report([report], destination, project=isolated_project)
+        self.assertEqual(files["markdown"], second["markdown"])
+        self.assertNotEqual(files["json"], second["json"])
+        cache = isolated_project / ".cache/ai"
+        self.assertIn(cache, Path(files["json"]).parents)
+        self.assertEqual(Path(second["markdown"]).parent, destination / "reports")
+        self.assertEqual(len(list((destination / "reports").glob("*.md"))), 1)
+        self.assertTrue(list(cache.rglob("previous_report.md")))
+        shutil.rmtree(str(cache))
+        self.assertEqual(Path(second["markdown"]).read_bytes(), first_content)
+        self.assertTrue(Path(report["output_file"]).is_file())
+        self.assertTrue(reusable.is_file())
+
+    def test_failed_retry_report_stays_in_cache_and_preserves_final_report(self):
+        report = self.apply([proposal("r1")], output="delivery")
+        destination = self.folder / "delivery"
+        first = review.write_delivery_report([report], destination)
+        before = Path(first["markdown"]).read_bytes()
+        failed = dict(input_file=str(self.source), error="Synthetic retry failure")
+        files = review.write_delivery_report([failed], destination)
+        self.assertIn(destination / ".cache/ai", Path(files["markdown"]).parents)
+        self.assertEqual(Path(first["markdown"]).read_bytes(), before)
+        self.assertEqual(len(list((destination / "reports").glob("*.md"))), 1)
 
     def test_project_rejects_mismatched_equation_before_writing(self):
         workbook = load_workbook(self.source)

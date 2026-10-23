@@ -9,6 +9,8 @@ import importlib
 import importlib.util
 import json
 import math
+import os
+import shutil
 from pathlib import Path
 import re
 import sys
@@ -901,6 +903,15 @@ def apply_workbook(entry, project=None, mapping_skill=None, output_dir=None):
 
 
 
+
+def ai_work_directory(project, fallback, stage):
+    """Keep disposable work separate from delivered files and persistent chemistry."""
+    root = Path(project) if project is not None else Path(fallback)
+    base = root / ".cache" / "ai" / stage
+    base.mkdir(parents=True, exist_ok=True)
+    return Path(tempfile.mkdtemp(prefix=datetime.now().strftime("%Y%m%d_%H%M%S_"), dir=str(base)))
+
+
 def completed_structure_changes(source, workbook_hash):
     """Read only structure additions bound to this exact staging workbook and archive."""
     handoff = source.with_suffix(".structures.json")
@@ -924,7 +935,7 @@ def completed_structure_changes(source, workbook_hash):
     return changes
 
 
-def write_delivery_report(reports, directory):
+def write_delivery_report(reports, directory, project=None):
     """Keep the readable report to a summary and applied changes; JSON keeps the audit."""
     if len(reports) != 1:
         raise ValueError("Write one report per input workbook; do not combine models")
@@ -932,13 +943,16 @@ def write_delivery_report(reports, directory):
     source = Path(reports[0].get("input_file") or "Unknown_input")
     label = re.sub(r"[^A-Za-z0-9_.-]", "_", re.sub(r"_2_atom_mapping$", "", source.stem))
     stem = "AI_mapping_review_" + label + "_" + datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    json_path, text_path = directory / (stem + ".json"), directory / (stem + ".md")
+    work = ai_work_directory(project, directory, "review")
+    json_path = work / (stem + ".json")
+    run_text = work / (stem + ".md")
+    text_path = directory / "reports" / (label + "_mapping_review.md")
     fields = ("scientifically_reviewed", "replaced", "retained", "unresolved")
     lines = ["# AI-assisted atom mapping review", "",
         "| Model | AI reviewed | Replaced | Retained | Reviewed unresolved | Status |",
         "| --- | " + " | ".join(["---:"] * len(fields)) + " | --- |"]
     totals = {key: 0 for key in fields}
-    structures, mappings, outputs, notices = [], [], [], []
+    structures, mappings, outputs, notices, archives = [], [], [], [], []
     incomplete = False
     def cell(value):
         return str(value or "").replace("|", "\\|").replace("\n", " ").replace("\r", " ")
@@ -973,6 +987,8 @@ def write_delivery_report(reports, directory):
                  target.get("Equation", ""))) + " |")
         if report.get("output_file"):
             outputs.append("- " + str(report["output_file"]))
+        if report.get("archive_file"):
+            archives.append("- Scientific evidence: " + str(report["archive_file"]))
     status = ("incomplete" if incomplete else "complete"
               if any(report.get("target_counts", {}).get("targets") for report in reports)
               else "no_targets")
@@ -990,14 +1006,24 @@ def write_delivery_report(reports, directory):
                   "| --- | --- | --- | --- |"] + mappings + [""]
     else:
         lines += ["No mapping replacements were applied.", ""]
-    lines += ["## Files", ""] + outputs + ["",
-              "Full mapped SMILES are in the reviewed workbooks. Validation, evidence and "
-              "continuation records: [JSON](" + json_path.name + ").", ""]
+    lines += ["## Files", ""] + outputs + archives + ["",
+              "Full mapped SMILES are in the reviewed workbooks. "
+              "Temporary execution details are kept in the AI cache.", ""]
     with json_path.open("x", encoding="utf-8") as stream:
         json.dump({"review_status": status, "totals": totals, "workbooks": reports},
                   stream, indent=2, allow_nan=False)
-    with text_path.open("x", encoding="utf-8") as stream:
-        stream.write("\n".join(lines))
+    content = "\n".join(lines)
+    run_text.write_text(content, encoding="utf-8")
+    if reports[0].get("error"):
+        return dict(markdown=str(run_text), json=str(json_path))
+    text_path.parent.mkdir(parents=True, exist_ok=True)
+    if text_path.exists():
+        shutil.copy2(str(text_path), str(work / "previous_report.md"))
+    # Atomic publication needs a short-lived file on the destination filesystem.
+    with tempfile.TemporaryDirectory(prefix=".ai-report-", dir=str(text_path.parent)) as temporary:
+        staged = Path(temporary) / text_path.name
+        staged.write_text(content, encoding="utf-8")
+        os.replace(str(staged), str(text_path))
     return dict(markdown=str(text_path), json=str(json_path))
 
 
@@ -1094,7 +1120,7 @@ def main(argv=None):
                 source = Path(item.get("input_file") or "Unknown_input").resolve()
                 project = find_project(args.project, [source])
                 paths = write_delivery_report(
-                    [item], output_directory(args.output_dir, project, source))
+                    [item], output_directory(args.output_dir, project, source), project=project)
                 delivery["report_files"].append(dict(input_file=item.get("input_file"), **paths))
             except (OSError, ValueError, KeyError, TypeError) as error:
                 item["report_error"] = str(error)

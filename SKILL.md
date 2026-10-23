@@ -203,6 +203,28 @@ match proves the missing correspondence. Manual records retain precedence but
 remain subject to scientific assessment. Only Final_Mapping changes during
 correspondence review; preserve the original selection and raw predictions.
 
+## Disposable AI work and final files
+
+Use `<project>/.cache/ai/<stage>/<run>/` for disposable AI process files:
+research downloads, extracted inputs, proposals, staging workbooks, retry reports,
+logs, validation output and continuation JSON. Stages may be workflow, setup,
+review, structures or enzymatic-mapping. Reuse the orchestrator's supplied run
+folder when available. Do not put these process files in the results root.
+
+Keep final workbooks in the selected case output directory and readable final
+reports under its `reports/` subfolder. Preserve reproducible preparation scripts
+and analysis plans with the case. Downloaded models, adopted AI/manual chemistry
+CSVs and immutable evidence supporting adopted records remain in `data/`; they
+are not disposable cache. Do not move the only copy of a prior final delivery or
+its scientific evidence into cache. A brief same-filesystem temporary file for
+atomic final publication is allowed and must be cleaned up.
+
+Users can remove `.cache/ai/` after its runs have stopped. This loses temporary
+progress and downloaded research pages, not formal results or adopted evidence.
+Do not automatically delete active runs, clear shared scientific tables, relocate
+old case files or change the computation project's own caches as a side effect.
+For standalone use without a project, use `.cache/ai/` under the chosen work folder.
+
 ## Write reviewed copies
 
 Put accepted proposals in the JSON described in the handoff reference, bound to
@@ -251,11 +273,13 @@ directory or resolve that file deliberately with the user. If no proposal passes
 report that no replacement was generated. Review-only copies may be delivered
 when review decisions are supplied; their AIGenerated flags stay unchanged.
 
-The apply command saves one timestamped `AI_mapping_review_<model>_*.md`
-report and matching audit JSON per input workbook, beside that model's delivery.
-Combine the model's SMILES and mapping changes in its one readable report; never
-combine different models into a shared report or split one model by change type.
-Existing reports are preserved. `report_files` is a list of per-input paths. Read the
+The apply command keeps one final reports/<model>_mapping_review.md per model,
+combining its SMILES and mapping changes. Retry reports, previous report versions
+and detailed process JSON go under .cache/ai/review/, not in the results root.
+Final report replacement is atomic; the preceding report is retained in cache.
+Input-processing failures keep their report in cache and do not replace an earlier
+final report. report_files is a per-input list linking the final Markdown and
+cached process JSON. Adopted scientific evidence stays in data/ai_mapping_reviews/. Read the
 report requirements in the handoff reference. Keep the readable report to the
 summary table, added/corrected SMILES and applied mapping changes. Do not expand
 unchanged, unresolved or unprocessed reactions there. Full scientific analyses,

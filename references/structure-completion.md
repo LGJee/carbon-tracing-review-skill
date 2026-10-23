@@ -58,8 +58,12 @@ Write one proposal JSON per workbook, binding it to the inspect hash:
 ```
 
 ```bash
-python <skill>/scripts/complete_structures.py complete structures.json --project <project> --output-dir <unused-staging-directory>
+python <skill>/scripts/complete_structures.py complete structures.json --project <project> --output-dir <project>/.cache/ai/structures/<unused-run-directory>
 ```
+
+Omitting --output-dir uses a fresh <project>/.cache/ai/structures/<run>/ directory.
+Keep the staging workbook and its .structures.json together there; publish only
+the later validated AI mapping copy to the case's result folder.
 
 Run completions sequentially within one project, because the AI structure table is
 shared. This invokes installed mapper environments; it is not a remote prediction

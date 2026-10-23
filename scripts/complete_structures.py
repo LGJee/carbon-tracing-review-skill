@@ -171,7 +171,7 @@ def update_rows(workbook, sheet_name, records, key="ReactionID"):
                 cell.data_type = "s"
 
 
-def complete(entry, project, output_dir):
+def complete(entry, project, output_dir=None):
     import pandas as pd
     from openpyxl import load_workbook
     from carbon_flow_tools import config, mapper_runner
@@ -184,6 +184,8 @@ def complete(entry, project, output_dir):
     if entry.get("input_sha256") != before:
         raise ValueError("Input SHA256 changed since structure inspection")
     model = review.model_name(path)
+    if output_dir is None:
+        output_dir = review.ai_work_directory(project, path.parent, "structures")
     output_dir.mkdir(parents=True, exist_ok=True)
     output = output_dir / path.name
     if output.exists() or output.resolve() == path:
@@ -320,17 +322,16 @@ def main():
     parser.add_argument("command", choices=("inspect", "complete"))
     parser.add_argument("input", type=Path)
     parser.add_argument("--project", type=Path, required=True)
-    parser.add_argument("--output-dir", type=Path)
+    parser.add_argument("--output-dir", type=Path,
+                        help="Optional unused staging directory; default: project .cache/ai/structures")
     args = parser.parse_args()
     project = review.find_project(args.project, [args.input])
     review.project_api(project)
     if args.command == "inspect":
         result = inspect(args.input.resolve(), project)
     else:
-        if args.output_dir is None:
-            parser.error("complete requires --output-dir pointing to an unused staging directory")
         entry = json.loads(args.input.read_text(encoding="utf-8"))
-        result = complete(entry, project, args.output_dir.resolve())
+        result = complete(entry, project, args.output_dir.resolve() if args.output_dir else None)
     print(json.dumps(result, indent=2))
 
 
