@@ -208,7 +208,7 @@ class WorkbookTests(unittest.TestCase):
         reactions[0].mapped_smiles, reactions[0].status = MAPPED, "mapped"
         predictions = {name: deepcopy(reactions) for name in review.BACKENDS}
         finish_analysis("Reduced", dict(input_file=path, metabolite_sheet="Metabolites"),
-            metabolites, predictions, [], 1, list(predictions), root, stage="map")
+            metabolites, predictions, [], list(predictions), root, stage="map")
         staged = root / "Reduced_2_atom_mapping.xlsx"
         wb = load_workbook(staged)
         try:
@@ -585,40 +585,68 @@ class WorkbookTests(unittest.TestCase):
         report = self.apply([proposal("r1")])
         self.assertEqual(report["accepted"], 0)
 
-    def test_written_copy_is_consumed_by_step3_enumeration(self):
+    def test_written_copy_is_consumed_by_step3_emu_and_versions_stay_distinct(self):
+        import shutil
+        # Add balanced external input/drain; the original fixture is an open chain.
+        wb = load_workbook(self.source)
+        ws = wb["Final_Mapping"]
+        ws.cell(1, ws.max_column + 1, "MappingCoverage")
+        for row in range(2, ws.max_row + 1):
+            ws.cell(row, ws.max_column, "Complete")
+        columns = [cell.value for cell in ws[1]]
+        for key, equation in [("in", "-> A[e]"), ("out", "E[c] ->")]:
+            wb["Nonzero"].append([key, "Boundary fixture", equation, 1])
+            record = dict(ReactionID=key, ReactionName="Boundary fixture", Flux=1,
+                          SelectedMapper="", ReviewRequired=False, AIGenerated=False,
+                          MappedReactionSMILES="", Equation=equation,
+                          MappingDirection="forward", MappingCoverage="Boundary")
+            ws.append([record.get(field) for field in columns])
+            selection = wb["Mapping_Selection"]
+            record.update(SelectionReason="Boundary fixture", SelectedMappedReactionSMILES="")
+            selection.append([record.get(cell.value) for cell in selection[1]])
+        wb.save(self.source)
+        wb.close()
+        self.before = review.digest(self.source)
         report = self.apply([proposal("r1", SWAPPED), proposal("r2")])
         from carbon_flow_tools import pipeline
         from carbon_flow_tools.cli import main
-        from carbon_flow_tools.atom_helpers import assignment_from_labeled_smiles
-
-        options = dict(
-            input_dir=str(self.folder / "reviewed"),
-            output_dir=str(self.folder / "reviewed"),
-            rounds=1,
-            carbon_sources={"Mixed_Culture": ["A[e]"]},
-            max_carbon_processes=1,
-            carbon_memory_gb=None,
-            tracing_python=sys.executable,
-        )
-        with patch.object(
-            pipeline, "run_mapper", side_effect=AssertionError("Mapper invoked")
-        ):
+        destination = self.folder / "reviewed"
+        ordinary = destination / self.source.name
+        shutil.copy2(str(self.source), str(ordinary))
+        mapping_hashes = {str(path.resolve()): review.digest(path)
+                          for path in [ordinary, Path(report["output_file"])]}
+        options = dict(input_dir=str(destination), output_dir=str(destination),
+                       carbon_sources={"Mixed_Culture": ["A[e]"]},
+                       max_carbon_processes=1, carbon_memory_gb=None,
+                       emu_allow_inorganic_carbon_recycling=True, emu_tolerance=1e-8,
+                       min_available_memory_gb=.01, max_excel_size_mb=50,
+                       tracing_python=sys.executable)
+        with patch.object(pipeline, "run_mapper", side_effect=AssertionError("Mapper invoked")):
             with redirect_stdout(StringIO()):
                 self.assertEqual(main("trace", options, []), 0)
-        output = self.folder / "reviewed/Mixed_Culture_3_carbon_flow_AIGenerated.xlsx"
-        workbook = load_workbook(output)
-        try:
-            self.assertEqual(workbook.sheetnames, ["Summary", "Carbon_Flow"])
-            records = list(workbook["Carbon_Flow"].values)
-            rows = [dict(zip(records[0], row)) for row in records[1:]]
-            product = next(row for row in rows if row["Production"] == "B[c]")
-            self.assertEqual(
-                assignment_from_labeled_smiles("CCO", product["LabeledSMILES"]),
-                ((0, 0, "C2"), (0, 1, "C1")),
-            )
-            self.assertIn("C[c]", {row["Production"] for row in rows})
-        finally:
-            workbook.close()
+        for suffix, expected in [("", 1), ("_AIGenerated", 0)]:
+            output = destination / ("Mixed_Culture_3_carbon_flow" + suffix + ".xlsx")
+            workbook = load_workbook(output)
+            try:
+                self.assertEqual(set(workbook.sheetnames), {"EMU_Metabolites", "EMU_BoundaryInputs"})
+                records = list(workbook["EMU_Metabolites"].values)
+                internal = {"FluxResidual", "Status", "StructureType", "KnownCarbonCount", "ContributionScope"}
+                self.assertFalse(internal.intersection(records[0]))
+                rows = [dict(zip(records[0], row)) for row in records[1:]]
+                product = next(row for row in rows if row["MetaboliteName"] == "C[c]")
+                self.assertAlmostEqual(product["Unknown"], expected)
+                self.assertAlmostEqual(product["A[e]"], 1 - expected)
+            finally:
+                workbook.close()
+        manifest = json.loads((destination / "carbon_flow_run.json").read_text())
+        self.assertEqual(manifest["method"], "EMU")
+        self.assertEqual(len(manifest["models"]), 2)
+        for status in manifest["models"]:
+            self.assertTrue(status["emu_completed"])
+            self.assertEqual(status["stop_reason"], "emu_solved")
+            self.assertEqual(status["mapping_sha256"], mapping_hashes[status["mapping_file"]])
+            self.assertNotIn("completed_rounds", status)
+        self.assertFalse((destination / "carbon_flow_summary.xlsx").exists())
         self.assertTrue(Path(report["output_file"]).is_file())
 
     def test_archive_retains_inputs_evidence_and_failed_proposals(self):
@@ -990,8 +1018,7 @@ class CarbonRuleReviewTests(unittest.TestCase):
                 source.to_excel(writer, sheet_name="Reactions", index=False)
                 metabolites.to_excel(writer, sheet_name="Metabolites", index=False)
             finish_analysis("Rules", dict(input_file=input_file, metabolite_sheet="Metabolites"),
-                            metabolites, {"LocalMapper": original}, [], 1,
-                            ["LocalMapper"], root, stage="map")
+                            metabolites, {"LocalMapper": original}, [], ["LocalMapper"], root, stage="map")
             path = root / "Rules_2_atom_mapping.xlsx"
             wb = load_workbook(path)
             try:

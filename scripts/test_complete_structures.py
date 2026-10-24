@@ -61,7 +61,7 @@ def fixture(root, product="B[c]", reaction_equation=None):
         rows[2].mapped_smiles, rows[2].status = MAPPED, "mapped"
     finish_analysis("Test", dict(input_file=path, metabolite_sheet="Metabolites"),
                     metabolites, predictions, [dict(Mapper="Input", SourceInputSHA256=review.digest(path))],
-                    1, list(predictions), root, stage="map")
+                    list(predictions), root, stage="map")
     return root / "Test_2_atom_mapping.xlsx"
 
 
@@ -94,7 +94,7 @@ class CompletionTests(unittest.TestCase):
             shutil.copyfile(PROJECT / "step2_atom_mapping.py", project / "step2_atom_mapping.py")
             original_context = completion.context
             calls = []
-            def predict(model, reactions, backend, settings, threads):
+            def predict(model, reactions, backend, settings, threads, memory_gb=None):
                 calls.append((backend, [r.reaction_id for r in reactions if r.status == "ready"]))
                 for reaction in reactions:
                     if reaction.status == "ready":
@@ -215,7 +215,7 @@ class CompletionTests(unittest.TestCase):
             shutil.copyfile(PROJECT / "step2_atom_mapping.py", project / "step2_atom_mapping.py")
             entry = dict(input_file=str(path), input_sha256=review.digest(path), structures=[proposal()])
             original_context = completion.context
-            def empty(model, reactions, backend, settings, threads):
+            def empty(model, reactions, backend, settings, threads, memory_gb=None):
                 for reaction in reactions:
                     if reaction.status == "ready":
                         reaction.mapped_smiles = ""
@@ -286,7 +286,7 @@ class CompletionTests(unittest.TestCase):
                 completion.complete(dict(entry, input_sha256="0" * 64), PROJECT, root / "bad")
             original_context = completion.context
             calls = []
-            def mapped(model, reactions, backend, settings, threads):
+            def mapped(model, reactions, backend, settings, threads, memory_gb=None):
                 calls.append((backend, [r.reaction_id for r in reactions if r.status == "ready"]))
                 for reaction in reactions:
                     if reaction.status == "ready":

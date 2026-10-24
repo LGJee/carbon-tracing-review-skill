@@ -26,7 +26,7 @@ also needs RDKit and the scientific validator. A supplied project must expose
 its existing reader/validation/save interfaces; incompatible APIs are reported.
 No package installation, remote prediction or network lookup occurs in review_workbooks.py. For missing SMILES, first use the separate [structure-completion workflow](structure-completion.md), which can call the installed local mapper environments for affected reactions.
 
-## Review targets and combined propagation
+## Review targets and source-balance handoff
 
 Review flagged rows and blank selected/final mappings even with FALSE flags;
 explicit Boundary/NoCarbon coverage is exempt from blank-map targeting. A missing
@@ -35,9 +35,9 @@ reason if no supported replacement can be generated. Do not invent structures.
 
 CarbonRules may save a reduced mapped subreaction. Its original coefficients and
 position pairs are in saved partial correspondence records; it is not a complete original-reaction map.
-During correspondence review, only Final_Mapping may change relative to its staged input; a preceding explicit structure-completion stage has the separate contract below. New step 3 reads that copy for both
-Enumeration and size-1 EMU-inspired source balances in a single result workbook.
-Inspect the installed project: older projects may support Enumeration only.
+During correspondence review, only Final_Mapping may change relative to its staged input; a preceding explicit structure-completion stage has the separate contract below. The current step3 reads that copy for fixed-flux size-1 EMU-inspired source
+balances. It no longer runs enumeration or uses rounds; inspect historical
+project copies rather than assuming the current interface.
 
 ## Whole-reaction completion before a verdict
 
@@ -129,7 +129,7 @@ outside intended edits, including Mapping_Info and raw prediction scores.
 Within correspondence review, only Final_Mapping may change. Mapping_Selection remains the staged tool
 comparison/selection record, including SelectionReason and its selected SMILES.
 The AI-reviewed Final_Mapping may therefore differ from Mapping_Selection;
-step 3 Enumeration reads Final_Mapping. Keep scientific rationale and evidence in the report
+step 3 source balances read Final_Mapping. Keep scientific rationale and evidence in the report
 and immutable archive instead of synchronizing them into the selection sheet.
 
 ReviewRequired is preserved, so a future run may still target an AI-assisted
@@ -256,21 +256,27 @@ so only the owner runs step 3.
 
    Substitute verified names and the real plan path; paths inside the plan use
    the installed project's conventions. Group files by compatible plan when
-   necessary. Reuse the tracing interpreter, installed method/round/resource
+   necessary. Reuse the tracing interpreter, installed EMU numerical/resource
    settings and size guards. Do not call all models by omitting the names.
 4. Check the exit status and this invocation's carbon_flow_run.json, input/mapping
-   hashes, saved tables and files. A prior workbook or Summary collection is not
-   proof that this run succeeded. Record actual mapping versions, selected
-   methods, saved Enumeration rounds, stop reasons and errors in the English
+   hashes, saved tables and files. A prior workbook or historical Summary is not
+   proof of current success. Require emu_completed=true, output_file and
+   stop_reason=emu_solved; emu_solved alone is insufficient. Record actual
+   mapping versions, source/Unknown fractions, numerical checks and errors in the English
    review report, with links to the outputs. Preserve the review report's original
    decisions and counts when adding this execution status.
 
 Step 3 reads available ordinary and AI-reviewed mappings independently for those
 models. It writes <model>_3_carbon_flow.xlsx and
 <model>_3_carbon_flow_AIGenerated.xlsx as applicable; either version may exist
-alone. Current versions combine Enumeration and size-1 EMU-inspired source
-balances according to script settings. Inspect older interfaces before running;
-do not invent a method flag or a separate step4.
+alone. The current version runs only size-1 EMU-inspired source balances,
+writing EMU_Metabolites and EMU_BoundaryInputs, without Summary or a summary
+collector. It omits FluxResidual, Status, StructureType, KnownCarbonCount and
+ContributionScope from the metabolite export while retaining internal checks.
+Record the actual EMU recycling and tolerance settings. A size/memory/disk error
+returns nonzero and preserves earlier output; never treat that old file as new.
+Inspect historical interfaces before running; do not invent method/round flags
+or a separate step4.
 
 No review targets means no fabricated AI copy: propagate the valid supplied
 mapping with its actual provenance. A retained/unresolved review-only copy can
@@ -287,7 +293,7 @@ outputs and explain what is needed. Do not claim downstream success.
 ```
 
 These tests create and remove temporary synthetic workbooks, check preservation
-and validation failures, and exercise the current step-3 Enumeration code path. They do not
+and validation failures, and exercise the current step-3 EMU code path. They do not
 review real reactions or change project results.
 
 

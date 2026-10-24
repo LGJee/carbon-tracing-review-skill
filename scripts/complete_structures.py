@@ -1,7 +1,6 @@
 """Persist evidence-backed missing structures and remap only affected reactions."""
 
 import argparse
-from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 import csv
 from datetime import datetime
@@ -245,12 +244,19 @@ def complete(entry, project, output_dir=None):
         configs = build_mapper_configs(settings)
         for backend in review.BACKENDS:
             mapper_runner.validate_mapper_config(backend, configs[backend])
-        workers, threads = config.parallel_capacity(3, settings["max_mapper_processes"], settings["mapper_memory_gb"])
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            tasks = [executor.submit(mapper_runner.run_mapper, model, predictions[backend],
-                                     backend, configs[backend], threads) for backend in review.BACKENDS]
-            for task in tasks:
-                task.result()
+        from carbon_flow_tools.task_scheduler import run_tasks
+        ordinary = [name for name in review.BACKENDS if name != "EnzymeMap"]
+        workers, threads = config.parallel_capacity(len(ordinary),
+            settings["max_mapper_processes"], settings["mapper_memory_gb"])
+        tasks = [(model, predictions[name], name, configs[name], threads,
+                  settings["mapper_memory_gb"]) for name in ordinary]
+        run_tasks(mapper_runner.run_mapper, tasks, workers, settings["mapper_memory_gb"],
+                  processes=False)
+        # EnzymeMap owns the following phase's CPU budget; avoid nested oversubscription.
+        mapper_runner.run_mapper(model, predictions["EnzymeMap"], "EnzymeMap",
+            configs["EnzymeMap"],
+            min(config.available_cpus(), settings["max_mapper_processes"] or config.available_cpus()),
+            None)
     selected, choices = select_mappings(predictions, carbon_structure_issues(metabolites))
     apply_manual_mappings(species, selected, choices, metabolites,
                          project / settings.get("manual_mapping_file", "data/manual_atom_mappings.csv"))

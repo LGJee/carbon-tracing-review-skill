@@ -348,17 +348,28 @@ plan and report the review no-op. If some workbooks fail, process only valid
 compatible workbooks and report incomplete coverage.
 
 Use the installed method settings and propagation implementation; do not bundle
-another engine. Newer step 3 combines Enumeration and size-1 EMU-inspired source
-balances in one workbook per mapping version. Do not invent a method CLI flag,
-create separate method workbooks or claim mean fractions are isotope simulations.
-Verify the process result, current run manifest and delivered files. Link the
-actual commands, outputs, mapping versions, saved rounds and stop reasons from
-the English review report; distinguish propagation failure from review failure.
+another engine. The current step3 runs only size-1 EMU-inspired fixed-flux
+source balances, independently for available ordinary/AI mappings. It has no
+rounds, enumeration selector, separate step4 or Summary collector. Each new
+workbook contains EMU_Metabolites and EMU_BoundaryInputs, without extra method
+suffixes. Do not invoke an old --rounds flag or restore removed project modules.
+Inspect a user-selected historical checkout and explain any interface mismatch.
+
+Verify exit status, the current manifest's mapping_file/mapping_sha256,
+emu_completed and output_file, plus stop_reason and numerical checks. emu_solved
+alone does not prove export succeeded. Memory/disk/size failures return nonzero
+and preserve prior workbooks. Add actual commands, mapping versions, source and
+Unknown fractions, assumptions and unresolved limits to the English review
+report, distinguishing calculation failure from review failure. Internal
+validation/scope columns are not required in EMU_Metabolites. Partial-structure
+fractions cover only explicitly represented known carbon positions, not an
+unspecified group. Do not redistribute Unknown or infer missing values as zero.
 
 Report reviewed/accepted/unresolved counts per workbook, evidence and remaining
-ambiguities, delivered paths, and which checks actually ran. Explain that results
-remain possible label reachability under the selected mappings, not experimental
-isotope abundance or quantitative carbon allocation. This skill repository is
+ambiguities, delivered paths, and checks actually run. Downstream results are
+model-dependent mean carbon origins, not measured allocations or full isotopomer
+simulations; successful execution does not establish mapping correctness.
+This skill repository is
 https://github.com/LGJee/carbon-tracing-review-skill; normal review does not
 authorize publication, installation changes or modifications to other projects.
 

@@ -150,3 +150,21 @@ models, reproducible scripts/plans, adopted chemistry CSVs and scientific eviden
 archives remain outside cache. After runs stop, users may delete .cache/ai/;
 this drops temporary progress without deleting final results. Existing work is
 not automatically relocated, and active caches are never automatically cleared.
+
+## Current EMU-only project handoff
+
+After validated review, run the selected project's step3 by default (unless
+review-only was requested). The current project performs fixed-flux size-1
+EMU-inspired balances only. New ordinary/AI outputs each contain EMU_Metabolites
+and EMU_BoundaryInputs; there are no rounds, enumeration options or Summary
+collection. Verify current mapping hashes, emu_completed/output_file and exit
+status. emu_solved alone is not successful delivery. Historical workbooks remain
+historical. Known fractions and Unknown are model-dependent, not experimental
+measurements or full isotopomer simulations. See references/workbook-handoff.md.
+
+Validation on 2026-10-24 used the current local EMU-only development interface.
+Official skill metadata checks passed. Tests were isolated and did not modify
+reference plans, model files or existing formal results. This does not certify
+biochemical accuracy, a fresh deployment, older public project versions or
+cross-platform execution. The computation project is not published by this skill
+maintenance task.
